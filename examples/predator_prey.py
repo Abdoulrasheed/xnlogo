@@ -1,41 +1,45 @@
-"""
-predator-prey model example for xlogo
-simple Lotka-Volterra predator-prey simulation using xlogo-compatible Python
-"""
+"""predator-prey dynamics model for xnlogo."""
 
-from xnlogo import Model, Agent, run
+from xnlogo import agent
 
 
-class Prey(Agent):
-    def step(self):
-        # prey reproduce with some probability
-        if self.random() < 0.04:
-            self.model.add_agent(Prey())
-        # move randomly
-        self.move(self.random_direction(), 1)
+@agent(breed="sheep")
+class Sheep:
+    energy: float = 5.0
+    age: int = 0
+
+    def setup(self):
+        self.energy = 5.0
+        self.age = 0
+
+    def graze(self):
+        self.energy = self.energy + 1.0
+
+    def move(self):
+        self.energy = self.energy - 0.5
+        self.age = self.age + 1
+
+    def die(self):
+        if self.energy <= 0:
+            self.energy = 0.0
 
 
-class Predator(Agent):
-    def step(self):
-        # predators die with some probability
-        if self.random() < 0.05:
-            self.model.remove_agent(self)
-            return
-        # move randomly
-        self.move(self.random_direction(), 1)
-        # eat prey if nearby
-        prey = self.model.nearby_agents(self, Prey, radius=2)
-        if prey:
-            self.model.remove_agent(prey[0])
-            # reproduce after eating
-            if self.random() < 0.1:
-                self.model.add_agent(Predator())
+@agent(breed="wolf")
+class Wolf:
+    energy: float = 10.0
+    age: int = 0
 
+    def setup(self):
+        self.energy = 10.0
+        self.age = 0
 
-model = Model()
-for _ in range(50):
-    model.add_agent(Prey())
-for _ in range(10):
-    model.add_agent(Predator())
+    def hunt(self):
+        self.energy = self.energy + 5.0
 
-run(model, steps=100)
+    def move(self):
+        self.energy = self.energy - 1.0
+        self.age = self.age + 1
+
+    def die(self):
+        if self.energy <= 0:
+            self.energy = 0.0
