@@ -1,4 +1,4 @@
-"""Session management for NetLogo integration."""
+"""session management for netlogo integration."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ _ACTIVE_NETLOGO_HOME: Optional[Path] = None
 
 @dataclass(slots=True)
 class SessionConfig:
-    """Configuration for NetLogo runtime sessions."""
+    """configuration for netlogo runtime sessions."""
 
     netlogo_home: Optional[Path] = None
     headless: bool = True
@@ -27,7 +27,7 @@ class SessionConfig:
 
 
 class NetLogoSession:
-    """Manage lifecycle for NetLogo interactions using JPype and the NetLogo Headless API."""
+    """manage lifecycle for netlogo interactions via jpype."""
 
     def __init__(self, config: SessionConfig | None = None) -> None:
         self.config = config or SessionConfig()
@@ -40,8 +40,6 @@ class NetLogoSession:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
-    # Lifecycle ---------------------------------------------------------------
-
     def open(self) -> None:
         if self._workspace is not None:
             return
@@ -52,11 +50,9 @@ class NetLogoSession:
     def close(self) -> None:
         if self._workspace is None:
             return
-        with contextlib.suppress(Exception):  # pragma: no cover - best effort cleanup
+        with contextlib.suppress(Exception):
             self._workspace.dispose()
         self._workspace = None
-
-    # Actions -----------------------------------------------------------------
 
     def load_model(self, path: Path) -> None:
         workspace = self._require_workspace()
@@ -73,8 +69,6 @@ class NetLogoSession:
     def repeat(self, command: str, ticks: int) -> None:
         for _ in range(ticks):
             self.command(command)
-
-    # Internal helpers --------------------------------------------------------
 
     def _require_workspace(self) -> Any:
         if self._workspace is None:
@@ -102,10 +96,10 @@ def _ensure_headless_workspace(config: SessionConfig) -> Any:
 
 
 def _import_jpype():
-    try:  # pragma: no cover - import guard
+    try:
         import jpype  # type: ignore[import-not-found]
-        import jpype.imports  # type: ignore[import-not-found]  # noqa: F401 - side effect enabling Java package imports
-    except ImportError as exc:  # pragma: no cover - dependency guard
+        import jpype.imports  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError as exc:
         raise RuntimeError(
             "JPype is not installed. Install xnlogo[runtime] or add jpype1 to your environment."
         ) from exc
@@ -294,7 +288,5 @@ def _resolve_resource_dir(
     if allow_missing:
         return None
 
-    # even if the directory is absent, return the first candidate path
-    # so that user-visible errors point to the expected location
     default_parts = relative_candidates[0]
     return netlogo_home.joinpath(*default_parts).resolve()

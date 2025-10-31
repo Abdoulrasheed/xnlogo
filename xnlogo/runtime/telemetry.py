@@ -1,4 +1,4 @@
-"""Telemetry capture and export utilities."""
+"""telemetry capture and export."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class TelemetryRecord:
 
 @dataclass
 class TelemetryBuffer:
-    """Collects telemetry samples during a NetLogo run."""
+    """collects telemetry samples during netlogo run."""
 
     records: List[TelemetryRecord] = field(default_factory=list)
 
