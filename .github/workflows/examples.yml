@@ -1,0 +1,52 @@
+name: Examples
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-examples:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+    
+    - name: Install xnlogo
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+    
+    - name: Build all examples
+      run: |
+        set -e
+        for example in examples/*.py; do
+          echo "Building $example..."
+          xnlogo build "$example"
+        done
+    
+    - name: Verify generated files
+      run: |
+        set -e
+        for example in examples/*.py; do
+          nlogox="${example%.py}.nlogox"
+          if [ ! -f "$nlogox" ]; then
+            echo "ERROR: $nlogox was not generated"
+            exit 1
+          fi
+          echo "✓ $nlogox exists"
+        done
+    
+    - name: Check examples
+      run: |
+        set -e
+        for example in examples/*.py; do
+          echo "Checking $example..."
+          xnlogo check "$example"
+        done
