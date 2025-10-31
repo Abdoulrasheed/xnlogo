@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.0" snapToGrid="true">
+  <code><![CDATA[breed [sheep sheep]
+sheep-own [energy wool]
+breed [wolf wolf]
+wolf-own [energy hunger]
+
+to setup
+  clear-all
+  ; TODO: instantiate Sheep
+  ; TODO: instantiate Wolf
+  reset-ticks
+end
+
+to go
+  ask sheep [ sheep-graze ]
+  ask sheep [ sheep-grow_wool ]
+  ask wolf [ wolf-hunt ]
+  ask wolf [ wolf-check_hunger ]
+  tick
+end
+
+to sheep-graze
+  set energy (energy + 0.5)
+end
+
+to sheep-grow_wool
+  if (energy > 2) [
+  set wool (wool + 0.1)
+]
+end
+
+to wolf-hunt
+  set hunger (hunger + 0.2)
+end
+
+to wolf-check_hunger
+  if (hunger > 5) [
+  set energy (energy - 1)
+]
+end
+]]></code>
+  <widgets>
+    <button x="10" y="10" height="30" width="90" forever="false" kind="Observer">setup</button>
+    <button x="110" y="10" height="30" width="90" forever="true" kind="Observer">go</button>
+  </widgets>
+</model>

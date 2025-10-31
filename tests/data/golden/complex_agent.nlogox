@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.0" snapToGrid="true">
+  <code><![CDATA[turtles-own [x y energy speed alive]
+
+to setup
+  clear-all
+  ; TODO: instantiate ComplexAgent
+  reset-ticks
+end
+
+to go
+  ask turtles [ complexagent-setup ]
+  ask turtles [ complexagent-move ]
+  ask turtles [ complexagent-update_energy ]
+  ask turtles [ complexagent-check_status ]
+  ask turtles [ complexagent-complex_math ]
+  ask turtles [ complexagent-boundary_check ]
+  tick
+end
+
+to complexagent-setup
+  set x 0.0
+  set y 0.0
+  set energy 100.0
+  set alive true
+end
+
+to complexagent-move
+  set x (x + speed)
+  set y (y + (speed * 0.5))
+end
+
+to complexagent-update_energy
+  set energy (energy - (speed * 0.1))
+end
+
+to complexagent-check_status
+  if (energy <= 0) [
+  set alive false
+]
+if (energy < 20) [
+  set speed 0.5
+]
+[
+  set speed 1.0
+]
+end
+
+to complexagent-complex_math
+  set x (x ^ 2)
+  set y (y - (x / 2))
+  if (x > 100) and (y < 50) [
+  set x 0.0
+]
+  if (x < 0) or (y < 0) [
+  set x abs x
+  set y abs y
+]
+end
+
+to complexagent-boundary_check
+  if (x > 100) [
+  set x 100
+]
+  if (x < -100) [
+  set x -100
+]
+  if (y > 100) [
+  set y 100
+]
+  if (y < -100) [
+  set y -100
+]
+end
+]]></code>
+  <widgets>
+    <button x="10" y="10" height="30" width="90" forever="false" kind="Observer">setup</button>
+    <button x="110" y="10" height="30" width="90" forever="true" kind="Observer">go</button>
+  </widgets>
+</model>

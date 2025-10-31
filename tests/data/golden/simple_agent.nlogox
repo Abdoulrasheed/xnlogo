@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.0" snapToGrid="true">
+  <code><![CDATA[turtles-own [count]
+
+to setup
+  clear-all
+  ; TODO: instantiate Counter
+  reset-ticks
+end
+
+to go
+  ask turtles [ counter-increment ]
+  ask turtles [ counter-reset ]
+  tick
+end
+
+to counter-increment
+  set count (count + 1)
+end
+
+to counter-reset
+  set count 0
+end
+]]></code>
+  <widgets>
+    <button x="10" y="10" height="30" width="90" forever="false" kind="Observer">setup</button>
+    <button x="110" y="10" height="30" width="90" forever="true" kind="Observer">go</button>
+  </widgets>
+</model>
