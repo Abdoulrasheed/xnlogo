@@ -96,7 +96,67 @@ class _ModuleAnalyzer(ast.NodeVisitor):
         self._populate_behaviors(agent, node)
         self._model.agents.append(agent)
 
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Capture interface = Interface(...) assignments."""
+        if self._model is None:
+            return
+        
+        # Check if this is an interface assignment
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "interface":
+                self._extract_interface(node.value)
+        
+        self.generic_visit(node)
+
     # Helpers ------------------------------------------------------------------
+
+    def _extract_interface(self, node: ast.AST) -> None:
+        """Extract UI widgets from Interface(...) constructor call."""
+        if not isinstance(node, ast.Call):
+            return
+        
+        # Check if this is an Interface constructor
+        if isinstance(node.func, ast.Name) and node.func.id == "Interface":
+            # Process keyword arguments to extract widgets
+            for keyword in node.keywords:
+                if keyword.arg and self._model:
+                    self._extract_widgets_from_keyword(keyword)
+    
+    def _extract_widgets_from_keyword(self, keyword: ast.keyword) -> None:
+        """Extract widgets from Interface keyword arguments."""
+        if not self._model:
+            return
+        
+        arg_name = keyword.arg
+        value = keyword.value
+        
+        # Handle single widget (view)
+        if arg_name == "view" and isinstance(value, ast.Call):
+            widget_xml = self._widget_to_xml_placeholder(value)
+            if widget_xml:
+                self._model.widgets.append(widget_xml)
+        
+        # Handle lists of widgets
+        elif isinstance(value, ast.List):
+            for element in value.elts:
+                if isinstance(element, ast.Call):
+                    widget_xml = self._widget_to_xml_placeholder(element)
+                    if widget_xml:
+                        self._model.widgets.append(widget_xml)
+    
+    def _widget_to_xml_placeholder(self, node: ast.Call) -> Optional[str]:
+        """Convert widget constructor call to XML placeholder.
+        
+        The actual XML generation happens at runtime when the widget
+        classes are instantiated. We store a marker here.
+        """
+        if isinstance(node.func, ast.Name):
+            # Store widget constructor call as unparsed Python code
+            # This will be evaluated later during code generation
+            widget_code = self._safe_unparse(node)
+            if widget_code:
+                return f"<!-- WIDGET: {widget_code} -->"
+        return None
 
     def _is_agent(self, node: ast.ClassDef) -> bool:
         for decorator in node.decorator_list:
@@ -125,6 +185,8 @@ class _ModuleAnalyzer(ast.NodeVisitor):
         return None
 
     def _populate_state_fields(self, agent: AgentSpec, node: ast.ClassDef) -> None:
+        instance_vars = self._detect_instance_variables(node)
+        
         for stmt in node.body:
             if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 name = stmt.target.id
@@ -132,9 +194,28 @@ class _ModuleAnalyzer(ast.NodeVisitor):
                     self._safe_unparse(stmt.annotation) if stmt.annotation else None
                 )
                 default = self._safe_unparse(stmt.value) if stmt.value else None
-                agent.state_fields.append(
-                    StateField(name=name, type_hint=type_hint, default=default)
-                )
+                
+                field = StateField(name=name, type_hint=type_hint, default=default)
+                
+                if name in instance_vars:
+                    agent.state_fields.append(field)
+                else:
+                    agent.class_attributes.append(field)
+    
+    def _detect_instance_variables(self, node: ast.ClassDef) -> set[str]:
+        instance_vars = set()
+        setup_methods = {"setup_world", "setup_agents", "__init__"}
+        
+        for stmt in node.body:
+            if isinstance(stmt, ast.FunctionDef) and stmt.name not in setup_methods:
+                for body_stmt in ast.walk(stmt):
+                    if isinstance(body_stmt, ast.Attribute):
+                        if (isinstance(body_stmt.value, ast.Name) and 
+                            body_stmt.value.id == "self"):
+                            attr_name = body_stmt.attr
+                            instance_vars.add(attr_name)
+        
+        return instance_vars
 
     def _populate_behaviors(self, agent: AgentSpec, node: ast.ClassDef) -> None:
         for stmt in node.body:

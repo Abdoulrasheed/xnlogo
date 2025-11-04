@@ -47,6 +47,7 @@ class AgentSpec:
     identifier: str
     breed: Optional[str]
     state_fields: List[StateField] = field(default_factory=list)
+    class_attributes: List[StateField] = field(default_factory=list)
     behaviors: List[AgentBehavior] = field(default_factory=list)
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -70,10 +70,50 @@ class NetLogoGenerator:
         widgets: List[str] = []
         for widget in self.model.widgets:
             if isinstance(widget, str):
-                widgets.append(widget)
+                # Check if this is a widget placeholder comment
+                if widget.startswith("<!-- WIDGET:") and widget.endswith("-->"):
+                    # Extract and evaluate the widget code
+                    widget_code = widget[12:-4].strip()  # Remove <!-- WIDGET: and -->
+                    evaluated_widget = self._evaluate_widget(widget_code)
+                    if evaluated_widget:
+                        widgets.append(evaluated_widget)
+                else:
+                    widgets.append(widget)
         if self.options.default_widgets:
             widgets.extend(_default_widgets())
         return widgets
+    
+    def _evaluate_widget(self, widget_code: str) -> Optional[str]:
+        """Evaluate widget constructor code and generate XML."""
+        try:
+            # Import the UI module
+            from xnlogo.runtime import ui
+            
+            # Create a safe namespace for evaluation
+            namespace = {
+                'View': ui.View,
+                'Button': ui.Button,
+                'Switch': ui.Switch,
+                'Slider': ui.Slider,
+                'Monitor': ui.Monitor,
+                'Plot': ui.Plot,
+                'PlotPen': ui.PlotPen,
+                'Chooser': ui.Chooser,
+                'TextBox': ui.TextBox,
+            }
+            
+            # Evaluate the widget constructor
+            widget_obj = eval(widget_code, namespace)
+            
+            # Generate XML from the widget object
+            if hasattr(widget_obj, 'to_xml'):
+                return widget_obj.to_xml()
+        except Exception as e:
+            # Log error but continue - widget will be skipped
+            import sys
+            print(f"Warning: Failed to evaluate widget '{widget_code}': {e}", file=sys.stderr)
+        
+        return None
 
     def emit(self) -> str:
         template_name = (
@@ -88,15 +128,17 @@ class NetLogoGenerator:
         """Render globals, patches-own, breeds, and turtles-own declarations."""
         lines: list[str] = []
 
-        # global variables
-        if self.model.globals:
-            globals_list = " ".join(
-                global_var.name for global_var in self.model.globals
-            )
+        all_globals = list(self.model.globals)
+        for agent in self.model.agents:
+            for class_attr in agent.class_attributes:
+                from xnlogo.ir.model import GlobalVar
+                all_globals.append(GlobalVar(name=class_attr.name, default=class_attr.default))
+
+        if all_globals:
+            globals_list = " ".join(g.name for g in all_globals)
             if globals_list:
                 lines.append(f"globals [{globals_list}]")
 
-        # patches-own
         if self.model.patches.state_fields:
             patch_fields = " ".join(
                 field.name for field in self.model.patches.state_fields
@@ -104,7 +146,6 @@ class NetLogoGenerator:
             if patch_fields:
                 lines.append(f"patches-own [{patch_fields}]")
 
-        # breeds and their state
         for agent in self.model.agents:
             if agent.breed:
                 breed_decl = self._render_breed(agent)
@@ -114,7 +155,6 @@ class NetLogoGenerator:
                 if state_decl:
                     lines.append(state_decl)
             else:
-                # generic turtles
                 state_names = " ".join(field.name for field in agent.state_fields)
                 if state_names:
                     lines.append(f"turtles-own [{state_names}]")
