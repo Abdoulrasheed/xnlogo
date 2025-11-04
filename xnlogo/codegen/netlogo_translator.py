@@ -9,8 +9,9 @@ from typing import Any
 class NetLogoTranslator(ast.NodeVisitor):
     """Convert Python AST to NetLogo code strings."""
 
-    def __init__(self) -> None:
+    def __init__(self, breed_prefix: str | None = None) -> None:
         self.agent_fields: set[str] = set()
+        self.breed_prefix = breed_prefix
 
     def translate(self, source: str, agent_fields: set[str] | None = None) -> str:
         """Translate Python source to NetLogo code."""
@@ -132,6 +133,10 @@ class NetLogoTranslator(ast.NodeVisitor):
             return f"sublist {list_expr} {start} {stop}"
 
         return ast.unparse(node)
+
+    def visit_Pass(self, node: ast.Pass) -> str:
+        """Translate pass statement - return empty string."""
+        return ""
 
     def visit_Return(self, node: ast.Return) -> str:
         """Translate return statement."""
@@ -338,8 +343,12 @@ class NetLogoTranslator(ast.NodeVisitor):
             obj = node.func.value
             method_name = node.func.attr
 
-            # self.method(args) -> method args
+            # self.method(args) -> breed-method args (if breed_prefix set)
             if isinstance(obj, ast.Name) and obj.id == "self":
+                # Add breed prefix if available
+                if self.breed_prefix:
+                    method_name = f"{self.breed_prefix}-{method_name}"
+                
                 args = [self._visit_arg(arg) for arg in node.args]
 
                 if not args:
@@ -436,6 +445,10 @@ class NetLogoTranslator(ast.NodeVisitor):
 
     def visit_Expr(self, node: ast.Expr) -> str:
         """Translate expression statements."""
+        # Skip standalone string literals (docstrings) - convert to comments
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            docstring = node.value.value
+            return f"; {docstring}"
         return self.visit(node.value)
 
     def generic_visit(self, node: Any) -> str:
@@ -443,7 +456,11 @@ class NetLogoTranslator(ast.NodeVisitor):
         return ast.unparse(node)
 
 
-def translate_statement(source: str, agent_fields: set[str] | None = None) -> str:
+def translate_statement(
+    source: str, 
+    agent_fields: set[str] | None = None,
+    breed_prefix: str | None = None
+) -> str:
     """Translate a Python statement to NetLogo code."""
-    translator = NetLogoTranslator()
+    translator = NetLogoTranslator(breed_prefix)
     return translator.translate(source, agent_fields)
