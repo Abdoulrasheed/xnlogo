@@ -12,6 +12,7 @@ from xnlogo.codegen.netlogo_translator import translate_statement
 from xnlogo.ir.model import (
     AgentBehavior,
     AgentSpec,
+    ExecutionContext,
     ModelSpec,
     Reporter,
     SchedulePhase,
@@ -58,10 +59,10 @@ class NetLogoGenerator:
             if reporter_block:
                 blocks.append(reporter_block)
 
-        # Agent behaviors
         for agent in self.model.agents:
             for behavior in agent.behaviors:
-                blocks.append(self._render_behavior(agent, behavior))
+                if behavior.schedule_phase == SchedulePhase.CUSTOM:
+                    blocks.append(self._render_behavior(agent, behavior))
 
         return "\n\n".join("\n".join(block) for block in blocks if block).strip() + "\n"
 
@@ -181,22 +182,35 @@ class NetLogoGenerator:
     def _render_setup(self) -> List[str]:
         lines = ["to setup", "  clear-all"]
 
-        # random seed if configured
         seed_cfg = self.model.random_seed_strategy
         if seed_cfg.strategy == "fixed" and seed_cfg.value is not None:
             lines.append(f"  random-seed {seed_cfg.value}")
 
-        # agent instantiation
         for agent in self.model.agents:
             lines.append(f"  ; TODO: instantiate {agent.identifier}")
 
-        # SETUP phase behaviors
         for agent in self.model.agents:
             for behavior in agent.behaviors:
-                if behavior.schedule_phase == SchedulePhase.SETUP:
-                    procedure_name = self._behavior_procedure(agent, behavior)
-                    target = agent.breed or "turtles"
-                    lines.append(f"  ask {target} [ {procedure_name} ]")
+                if (behavior.schedule_phase == SchedulePhase.SETUP and 
+                    behavior.context == ExecutionContext.OBSERVER):
+                    lines.append(f"  {behavior.name}")
+        
+        for agent in self.model.agents:
+            turtle_setups = [
+                b for b in agent.behaviors
+                if b.schedule_phase == SchedulePhase.SETUP and
+                   b.context == ExecutionContext.TURTLE
+            ]
+            if turtle_setups:
+                target = agent.breed or "turtles"
+                lines.append(f"  ask {target} [")
+                for behavior in turtle_setups:
+                    for statement in behavior.statements:
+                        if isinstance(statement, RawStatement):
+                            agent_fields = {field.name for field in agent.state_fields}
+                            translated = translate_statement(statement.source, agent_fields)
+                            lines.append(f"    {translated}")
+                lines.append("  ]")
 
         lines.append("  reset-ticks")
         lines.append("end")
@@ -204,12 +218,31 @@ class NetLogoGenerator:
 
     def _render_go(self) -> List[str]:
         lines = ["to go"]
+        
+        for agent in self.model.agents:
+            turtle_behaviors = [
+                b for b in agent.behaviors 
+                if b.schedule_phase == SchedulePhase.TICK and 
+                   b.context == ExecutionContext.TURTLE
+            ]
+            
+            if turtle_behaviors:
+                target = agent.breed or "turtles"
+                lines.append(f"  ask {target} [")
+                for behavior in turtle_behaviors:
+                    for statement in behavior.statements:
+                        if isinstance(statement, RawStatement):
+                            agent_fields = {field.name for field in agent.state_fields}
+                            translated = translate_statement(statement.source, agent_fields)
+                            lines.append(f"    {translated}")
+                lines.append("  ]")
+        
         for agent in self.model.agents:
             for behavior in agent.behaviors:
-                if behavior.schedule_phase == SchedulePhase.TICK:
-                    procedure_name = self._behavior_procedure(agent, behavior)
-                    target = agent.breed or "turtles"
-                    lines.append(f"  ask {target} [ {procedure_name} ]")
+                if behavior.context == ExecutionContext.OBSERVER:
+                    if "update" in behavior.name or "stats" in behavior.name:
+                        lines.append(f"  {behavior.name}")
+        
         lines.append("  tick")
         lines.append("end")
         return lines
@@ -243,9 +276,13 @@ class NetLogoGenerator:
         return lines
 
     def _behavior_procedure(self, agent: AgentSpec, behavior: AgentBehavior) -> str:
-        agent_slug = agent.identifier.lower().replace(" ", "-")
-        behavior_slug = behavior.name.lower().replace(" ", "-")
-        return f"{agent_slug}-{behavior_slug}"
+        if behavior.context == ExecutionContext.OBSERVER:
+            return behavior.name
+        
+        if agent.breed:
+            return f"{agent.breed}-{behavior.name}"
+        
+        return behavior.name
 
 
 def _default_widgets() -> List[str]:

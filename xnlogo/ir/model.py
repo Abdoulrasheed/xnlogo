@@ -15,6 +15,11 @@ class SchedulePhase(Enum):
     CUSTOM = auto()
 
 
+class ExecutionContext(Enum):
+    OBSERVER = auto()
+    TURTLE = auto()
+
+
 @dataclass(slots=True)
 class StateField:
     name: str
@@ -39,6 +44,7 @@ class AgentBehavior:
     name: str
     statements: List[IRStatement] = field(default_factory=list)
     schedule_phase: SchedulePhase = SchedulePhase.TICK
+    context: ExecutionContext = ExecutionContext.TURTLE
     probabilistic: bool = False
 
 

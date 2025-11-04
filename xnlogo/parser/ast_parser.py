@@ -10,7 +10,9 @@ from typing import Iterable, Iterator, Optional
 from xnlogo.ir.model import (
     AgentBehavior,
     AgentSpec,
+    ExecutionContext,
     ModelSpec,
+    SchedulePhase,
     StateField,
 )
 from xnlogo.ir.statements import IRStatement, RawStatement
@@ -222,7 +224,32 @@ class _ModuleAnalyzer(ast.NodeVisitor):
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 behavior = AgentBehavior(name=stmt.name)
                 behavior.statements = list(self._statements_from_function(stmt))
+                behavior.schedule_phase = self._determine_schedule_phase(stmt)
+                behavior.context = self._determine_context(stmt)
                 agent.behaviors.append(behavior)
+    
+    def _determine_schedule_phase(self, func: ast.FunctionDef) -> SchedulePhase:
+        if func.name.startswith("setup_"):
+            return SchedulePhase.SETUP
+        elif func.name in ("run_model", "go", "step"):
+            return SchedulePhase.TICK
+        return SchedulePhase.CUSTOM
+    
+    def _determine_context(self, func: ast.FunctionDef) -> ExecutionContext:
+        observer_keywords = ["sprout", "create-turtles", "clear-turtles", "reset-ticks", "clear-all", "split"]
+        source = self._safe_unparse(func) or ""
+        
+        for keyword in observer_keywords:
+            if keyword in source:
+                return ExecutionContext.OBSERVER
+        
+        if func.name == "setup_world":
+            return ExecutionContext.OBSERVER
+        
+        if "update" in func.name or "stats" in func.name or "analysis" in func.name:
+            return ExecutionContext.OBSERVER
+        
+        return ExecutionContext.TURTLE
 
     def _statements_from_function(self, func: ast.FunctionDef) -> Iterator[IRStatement]:
         for stmt in func.body:
