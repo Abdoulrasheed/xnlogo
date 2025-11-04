@@ -84,56 +84,17 @@ class NetLogoGenerator:
 
     # Internal helpers ---------------------------------------------------------
 
-    def _extract_globals_from_agents(self) -> set[str]:
-        """Identify agent fields that should be model globals.
-        
-        Promotes fields to globals if they:
-        1. Appear in multiple breeds with same default value
-        2. Match known global patterns (configuration parameters)
-        """
-        field_counts: dict[str, list[tuple[str, str]]] = {}
-        
-        for agent in self.model.agents:
-            for field in agent.state_fields:
-                if field.name not in field_counts:
-                    field_counts[field.name] = []
-                field_counts[field.name].append((agent.identifier, field.default or ""))
-        
-        # Fields appearing in multiple agents with same default
-        global_candidates = set()
-        for field_name, occurrences in field_counts.items():
-            if len(occurrences) > 1:
-                defaults = [default for _, default in occurrences]
-                if len(set(defaults)) == 1:  # Same default everywhere
-                    global_candidates.add(field_name)
-        
-        # Known global patterns (configuration/intervention parameters)
-        global_patterns = [
-            'infection_rate', 'survival_rate', 'immunity_duration',
-            'travel_restrictions', 'social_distancing', 'self_isolation',
-            'undetected_period', 'illness_duration'
-        ]
-        
-        for pattern in global_patterns:
-            if pattern in field_counts:
-                global_candidates.add(pattern)
-        
-        return global_candidates
-
     def _render_declarations(self) -> list[str]:
         """Render globals, patches-own, breeds, and turtles-own declarations."""
         lines: list[str] = []
 
-        # Extract potential globals from agent fields
-        promoted_globals = self._extract_globals_from_agents()
-        
-        # Combine with model globals
-        all_globals = set(g.name for g in self.model.globals) | promoted_globals
-        
         # global variables
-        if all_globals:
-            globals_list = " ".join(sorted(all_globals))
-            lines.append(f"globals [{globals_list}]")
+        if self.model.globals:
+            globals_list = " ".join(
+                global_var.name for global_var in self.model.globals
+            )
+            if globals_list:
+                lines.append(f"globals [{globals_list}]")
 
         # patches-own
         if self.model.patches.state_fields:
@@ -143,21 +104,18 @@ class NetLogoGenerator:
             if patch_fields:
                 lines.append(f"patches-own [{patch_fields}]")
 
-        # breeds and their state (excluding promoted globals)
+        # breeds and their state
         for agent in self.model.agents:
             if agent.breed:
                 breed_decl = self._render_breed(agent)
                 if breed_decl:
                     lines.append(breed_decl)
-                state_decl = self._render_agent_state(agent, exclude=promoted_globals)
+                state_decl = self._render_agent_state(agent)
                 if state_decl:
                     lines.append(state_decl)
             else:
                 # generic turtles
-                state_names = " ".join(
-                    field.name for field in agent.state_fields 
-                    if field.name not in promoted_globals
-                )
+                state_names = " ".join(field.name for field in agent.state_fields)
                 if state_names:
                     lines.append(f"turtles-own [{state_names}]")
 
@@ -171,17 +129,11 @@ class NetLogoGenerator:
         singular = agent.identifier.lower().replace(" ", "-")
         return f"breed [{plural} {singular}]"
 
-    def _render_agent_state(self, agent: AgentSpec, exclude: set[str] | None = None) -> str | None:
-        """Render state fields for a breed, excluding specified fields."""
+    def _render_agent_state(self, agent: AgentSpec) -> str | None:
+        """Render state fields for a breed."""
         if not agent.state_fields:
             return None
-        
-        exclude = exclude or set()
-        state_fields = " ".join(
-            field.name for field in agent.state_fields 
-            if field.name not in exclude
-        )
-        
+        state_fields = " ".join(field.name for field in agent.state_fields)
         if not state_fields:
             return None
         return f"{agent.breed}-own [{state_fields}]"
@@ -213,26 +165,11 @@ class NetLogoGenerator:
     def _render_go(self) -> List[str]:
         lines = ["to go"]
         for agent in self.model.agents:
-            # Find the main "step" behavior (heuristic: update_state, step, tick, or last TICK behavior)
-            main_behavior = None
             for behavior in agent.behaviors:
                 if behavior.schedule_phase == SchedulePhase.TICK:
-                    if behavior.name in ['update_state', 'step', 'tick', 'go']:
-                        main_behavior = behavior
-                        break
-            
-            # If no specific entry point found, use last TICK behavior
-            if not main_behavior:
-                for behavior in reversed(agent.behaviors):
-                    if behavior.schedule_phase == SchedulePhase.TICK:
-                        main_behavior = behavior
-                        break
-            
-            if main_behavior:
-                procedure_name = self._behavior_procedure(agent, main_behavior)
-                target = agent.breed or "turtles"
-                lines.append(f"  ask {target} [ {procedure_name} ]")
-        
+                    procedure_name = self._behavior_procedure(agent, behavior)
+                    target = agent.breed or "turtles"
+                    lines.append(f"  ask {target} [ {procedure_name} ]")
         lines.append("  tick")
         lines.append("end")
         return lines
@@ -241,18 +178,11 @@ class NetLogoGenerator:
         lines = [f"to {self._behavior_procedure(agent, behavior)}"]
 
         agent_fields = {field.name for field in agent.state_fields}
-        breed_prefix = agent.identifier.lower().replace(" ", "-")
 
         for statement in behavior.statements:
             if isinstance(statement, RawStatement):
-                translated = translate_statement(
-                    statement.source, 
-                    agent_fields,
-                    breed_prefix=breed_prefix
-                )
-                # Skip empty translations (from pass statements)
-                if translated.strip():
-                    lines.append(f"  {translated}")
+                translated = translate_statement(statement.source, agent_fields)
+                lines.append(f"  {translated}")
             else:  # pragma: no cover - future extensions
                 lines.append("  ; unsupported statement")
         lines.append("end")
