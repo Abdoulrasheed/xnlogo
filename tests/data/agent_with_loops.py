@@ -1,33 +1,41 @@
-"""Test agent model with for and while loops."""
+"""Test model with for and while loops."""
 
-from xnlogo import agent
+from xnlogo.runtime import Model, breed, reset_ticks, tick
 
 
-@agent(
-    breed="walker",
-    state=["energy", "position", "steps_taken"],
-    globals=["total_walkers"],
-)
-class Walker:
-    """Agent that uses loops for movement."""
+class WalkerModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.walkers = breed("walkers", "walker")
+        self.total_walkers = 0
 
     def setup(self):
-        """Initialize walker."""
-        self.energy = 100
-        self.position = 0
-        self.steps_taken = 0
+        """Initialize walkers."""
+        reset_ticks()
+        self.total_walkers = 5
+        
+        for i in range(self.total_walkers):
+            walker = self.walkers.create(1)
+            walker.energy = 100
+            walker.position = 0
+            walker.steps_taken = 0
+            # Use ternary operator (when supported)
+            walker.color = 15 if walker.energy > 50 else 25
 
-        # Use ternary operator
-        self.color = 15 if self.energy > 50 else 25
+    def go(self):
+        for walker in self.walkers.all():
+            self.move_forward(walker)
+            self.search_neighbors(walker)
+        tick()
 
-    def move_forward(self):
+    def move_forward(self, walker):
         """Move using a for loop."""
         # Simple for loop with range
         for step in range(5):
-            self.position += 1
-            self.steps_taken += 1
+            walker.position += 1
+            walker.steps_taken += 1
 
-    def search_neighbors(self):
+    def search_neighbors(self, walker):
         """Search using while loop."""
         distance = 1
         found = False
@@ -38,12 +46,12 @@ class Walker:
             neighbors = [1, 2, 3]  # Example list
 
             # Use in operator
-            if self.position in neighbors:
+            if walker.position in neighbors:
                 found = True
 
             distance += 1
 
-    def get_energy_level(self):
+    def get_energy_level(self, walker):
         """Get energy as list index."""
         levels = [0, 25, 50, 75, 100]
 

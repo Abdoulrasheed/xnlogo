@@ -32,7 +32,7 @@ class DiagnosticBag:
     def __iter__(self) -> Iterator[Diagnostic]:
         return iter(self._items)
 
-    def __len__(self) -> int:  # pragma: no cover - trivial
+    def __len__(self) -> int:
         return len(self._items)
 
     def has_errors(self) -> bool:

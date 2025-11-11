@@ -1,21 +1,30 @@
 """Test model with complex expressions and multiple behaviors."""
 
-from xnlogo import agent
+from xnlogo.runtime import Model, reset_ticks, tick
 
 
-@agent
-class ComplexAgent:
-    x: float = 0.0
-    y: float = 0.0
-    energy: float = 100.0
-    speed: float = 1.0
-    alive: bool = True
+class ComplexAgentModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.x = 0.0
+        self.y = 0.0
+        self.energy = 100.0
+        self.speed = 1.0
+        self.alive = True
 
     def setup(self):
+        reset_ticks()
         self.x = 0.0
         self.y = 0.0
         self.energy = 100.0
         self.alive = True
+
+    def go(self):
+        self.move()
+        self.update_energy()
+        self.check_status()
+        self.boundary_check()
+        tick()
 
     def move(self):
         self.x = self.x + self.speed

@@ -6,4 +6,7 @@
     {{ widget | safe }}
   {% endfor %}
   </widgets>
+  {% if info_text %}
+  <info>{{ info_text }}</info>
+  {% endif %}
 </model>

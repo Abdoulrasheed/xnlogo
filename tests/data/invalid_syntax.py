@@ -1,9 +1,12 @@
 """Test file with invalid Python syntax."""
-from xnlogo import agent
+from xnlogo.runtime import Model, breed
 
 
-@agent(breed="broken")
-class BrokenAgent:
+class BrokenModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.agents = breed("agents", "agent")
+    
     def bad_method(self):
         # Missing closing parenthesis
         print("hello"

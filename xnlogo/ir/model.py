@@ -46,12 +46,14 @@ class AgentBehavior:
     schedule_phase: SchedulePhase = SchedulePhase.TICK
     context: ExecutionContext = ExecutionContext.TURTLE
     probabilistic: bool = False
+    parameters: List[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class AgentSpec:
     identifier: str
     breed: Optional[str]
+    singular: Optional[str] = None  # Singular form for breed declaration
     state_fields: List[StateField] = field(default_factory=list)
     class_attributes: List[StateField] = field(default_factory=list)
     behaviors: List[AgentBehavior] = field(default_factory=list)
@@ -76,3 +78,4 @@ class ModelSpec:
     random_seed_strategy: SeedConfig = field(default_factory=SeedConfig)
     reporters: List[Reporter] = field(default_factory=list)
     widgets: List[dict] = field(default_factory=list)
+    info_text: Optional[str] = None

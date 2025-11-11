@@ -1,12 +1,9 @@
 # xnLogo
 
-A Python-to-NetLogo transpiler and integration toolkit for agent-based modeling.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-## Overview
-
-xnLogo enables researchers and developers to write agent-based simulations in Python and compile them to NetLogo. The system provides transpilation (Python to NetLogo code generation) and runtime integration (controlling NetLogo models from Python).
-
-Write models using Python's syntax and tooling, then execute them in NetLogo's simulation environment.
+Write agent-based models in Python and export them to NetLogo.
 
 ## Installation
 
@@ -14,127 +11,229 @@ Write models using Python's syntax and tooling, then execute them in NetLogo's s
 pip install xnlogo
 ```
 
-Requirements:
-- Python 3.10 or later
-- NetLogo 7.0 or later (for running compiled models)
-- Java 17 or later (for runtime integration)
-
 ## Quick Start
 
 Create `counter.py`:
 
 ```python
-from xnlogo import agent
+from xnlogo.runtime import Model, reset_ticks, tick, Button, Monitor
 
-@agent
-class Counter:
-    count: int = 0
-    
-    def increment(self):
-        self.count = self.count + 1
-    
-    def reset(self):
+class CounterModel(Model):
+    def __init__(self):
+        super().__init__()
         self.count = 0
+        
+    def setup(self):
+        reset_ticks()
+        self.count = 0
+    
+    def go(self):
+        self.count += 1
+        tick()
+    
+    def ui(self):
+        self.add_widget(Button(command="setup", x=15, y=10, width=150, height=60))
+        self.add_widget(Button(command="go", x=175, y=10, width=150, height=60, forever=True))
+        self.add_widget(Monitor(expression="count", x=15, y=80, width=150, height=60))
 ```
 
-Compile to NetLogo:
+Build to NetLogo:
 
 ```bash
 xnlogo build counter.py
 ```
 
-This generates `counter.nlogox` which can be opened in NetLogo 7.
+This generates `counter.nlogox` that can be opened in NetLogo 7.
 
 ## Features
 
-- **Agent-based modeling** - Define agents with state and behaviors using Python classes
-- **Semantic validation** - Detect unsupported constructs before compilation
-- **NetLogo 7 support** - Generate `.nlogox` files (legacy `.nlogo` also supported)
-- **Runtime integration** - Run simulations and collect telemetry from Python
-- **Type annotations** - Use Python type hints for agent state fields
-- **CLI tools** - Complete command-line interface for validation, compilation, and execution
+### Core Capabilities
 
-## Command-Line Interface
+- **Python Models**: Write agent-based models using Python classes and methods
+- **Breed System**: Define multiple agent types with `breed()` function
+- **UI Widgets**: Declarative interface definition with buttons, sliders, monitors, plots
+- **Semantic Validation**: Catch errors before compilation with detailed diagnostics
+- **NetLogo 7 Support**: Generate modern `.nlogox` format (legacy `.nlogo` also supported)
 
-| Command | Purpose |
-|---------|---------|
-| `xnlogo check <path>` | Validate Python code without compiling |
-| `xnlogo build <path>` | Compile to NetLogo format |
-| `xnlogo run <path>` | Execute simulation in NetLogo |
-| `xnlogo export <path>` | Export telemetry data to CSV/JSON |
+### Supported Python Features
 
-## Example: Flocking Model
+- Instance variables, methods, type hints
+- Basic control flow (if/elif/else, while, for)
+- Lists, arithmetic, comparisons, boolean logic
+- Turtle graphics commands (forward, back, left, right, etc.)
+- Observer commands (clear-all, reset-ticks, tick, etc.)
+
+### Breed System
+
+Define agent types:
 
 ```python
-from xnlogo import agent
+from xnlogo.runtime import Model, breed
 
-@agent
-class Boid:
-    speed: float = 1.0
-    heading: float = 0.0
+Rabbit = breed("rabbit")
+Fox = breed("fox")
+
+class EcosystemModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.rabbits = []
+        self.foxes = []
+    
+    def add_rabbit(self):
+        rabbit = Rabbit()
+        rabbit.energy = 10
+        self.rabbits.append(rabbit)
+    
+    def add_fox(self):
+        fox = Fox()
+        fox.energy = 20
+        self.foxes.append(fox)
+```
+
+## Examples
+
+### Random Walker
+
+```python
+from xnlogo.runtime import Model, breed, reset_ticks, tick
+from xnlogo.runtime import clear_all, crt, forward, right
+import random
+
+Walker = breed("walker")
+
+class RandomWalkModel(Model):
+    def setup(self):
+        clear_all()
+        reset_ticks()
+        crt(100, Walker)
+    
+    def go(self):
+        for walker in Walker.all():
+            right(random.uniform(0, 360))
+            forward(1)
+        tick()
+```
+
+### Population Dynamics
+
+```python
+from xnlogo.runtime import Model, breed, reset_ticks, tick, Slider, Monitor
+import random
+
+Rabbit = breed("rabbit")
+
+class PopulationModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.birth_rate = 0.05
+        self.death_rate = 0.02
+        self.rabbits = []
     
     def setup(self):
-        self.speed = 0.5 + self.random_float(0.5)
-        self.heading = self.random_float(360)
+        reset_ticks()
+        self.rabbits = []
+        for _ in range(100):
+            self.rabbits.append(Rabbit())
     
-    def flock(self):
-        neighbors = self.nearby_agents(self, Boid, radius=3)
-        if neighbors:
-            avg_heading = sum(n.heading for n in neighbors) / len(neighbors)
-            turn = (avg_heading - self.heading) * 0.05
-            self.heading = self.heading + turn
-        self.forward(self.speed)
-```
-
-Compile and run:
-
-```bash
-xnlogo build flocking.py
-xnlogo run flocking.py --ticks 100
-```
-
-## Runtime Integration
-
-Execute models and collect data from Python:
-
-```python
-from pathlib import Path
-from xnlogo.runtime.session import NetLogoSession, SessionConfig
-
-config = SessionConfig(netlogo_home=Path("/Applications/NetLogo 7.0.0"))
-
-with NetLogoSession(config) as session:
-    session.load_model(Path("flocking.nlogox"))
-    session.command("setup")
-    session.repeat("go", 100)
+    def go(self):
+        if random.random() < self.birth_rate:
+            self.rabbits.append(Rabbit())
+        
+        if self.rabbits and random.random() < self.death_rate:
+            self.rabbits.pop()
+        
+        tick()
     
-    population = session.report("count turtles")
-    avg_speed = session.report("mean [speed] of turtles")
+    def ui(self):
+        self.add_widget(Slider(variable="birth_rate", min_val=0, max_val=0.1, default=0.05, x=15, y=10, width=310, height=40))
+        self.add_widget(Slider(variable="death_rate", min_val=0, max_val=0.1, default=0.02, x=15, y=60, width=310, height=40))
+        self.add_widget(Monitor(expression="length rabbits", x=15, y=110, width=150, height=60))
 ```
 
 ## Documentation
 
-- [User Guide](docs/user-guide.md) - Detailed usage and examples
-- [Architecture](docs/architecture.md) - System design and internals
-- [Translation Rules](docs/translation-rules.md) - Python to NetLogo conversion reference
-- [Python-NetLogo Compatibility](docs/python-netlogo-compatibility.md) - Feature compatibility matrix
+- [User Guide](docs/user-guide.md) - Complete usage guide
+- [Architecture](docs/architecture.md) - System design overview
+- [Technical Overview](docs/technical-overview.md) - Implementation details
+- [Translation Rules](docs/translation-rules.md) - Python to NetLogo mapping
+- [Testing Strategy](docs/testing-strategy.md) - Testing approach
 
-## Project Status
+## CLI Usage
 
-xnLogo is under active development. Core features are stable:
+```bash
+xnlogo build model.py
 
-- Agent parsing and compilation
-- Python-to-NetLogo statement translation
-- Semantic validation
-- Runtime integration
-- NetLogo 7 `.nlogox` output
+xnlogo build model.py --format nlogo
 
-Advanced NetLogo features (breeds, links, extensions) are in progress.
+xnlogo build model.py --output my_model.nlogox
+
+xnlogo run model.py --ticks 1000
+
+xnlogo --version
+```
+
+## Requirements
+
+- Python 3.10 or higher
+- NetLogo 7.0 or higher (to run generated models)
+
+## Project Structure
+
+```
+xnlogo/
+├── runtime/
+├── parser/
+├── ir/
+├── codegen/
+├── semantics/
+└── cli/
+```
+
+## Development
+
+```bash
+git clone https://github.com/yourusername/xnlogo.git
+cd xnlogo
+
+pip install -e .
+
+pytest
+```
+
+## Limitations
+
+- List comprehensions not yet supported
+- Lambda functions limited (only in widget callbacks)
+- Class inheritance only for Model subclass
+- No imports from external packages in model code
+- Limited string operations
+- No exception handling
+- No decorators
+- No tuple unpacking
+- No dictionary type
+- No generators or yield
+
+See [Python-NetLogo Compatibility](docs/python-netlogo-compatibility.md) for complete feature support matrix.
 
 ## License
 
-MIT License
+MIT License. See [LICENSE](LICENSE) for details.
 
-## Acknowledgments
+## Contributing
 
-Built on [NetLogo](https://ccl.northwestern.edu/netlogo/) by Uri Wilensky and the CCL at Northwestern University.
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## Support
+
+- Issues: https://github.com/yourusername/xnlogo/issues
+- Documentation: https://github.com/yourusername/xnlogo/docs
+
+## Credits
+
+Built with Python 3.10+, targeting NetLogo 7.x compatibility.

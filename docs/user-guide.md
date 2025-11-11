@@ -1,16 +1,16 @@
 # xnLogo User Guide
 
-Complete guide to building NetLogo models with Python.
+Complete guide to building NetLogo models with Python using xnLogo.
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Your First Model](#your-first-model)
-- [Agent Basics](#agent-basics)
-- [Working with Breeds](#working-with-breeds)
+- [Quick Start](#quick-start)
+- [Model Basics](#model-basics)
+- [Working with Agents](#working-with-agents)
 - [Model Lifecycle](#model-lifecycle)
-- [Running Models](#running-models)
-- [Telemetry and Data Export](#telemetry-and-data-export)
+- [User Interface](#user-interface)
+- [Running and Testing](#running-and-testing)
 - [Common Patterns](#common-patterns)
 - [Troubleshooting](#troubleshooting)
 
@@ -18,9 +18,12 @@ Complete guide to building NetLogo models with Python.
 
 ### Requirements
 
-- Python 3.10+
-- Java 17+ (for NetLogo runtime)
-- NetLogo 7.0+ (optional, for viewing models)
+- Python 3.10 or higher
+- pip package manager
+
+**Optional (for running models):**
+- Java 17 or higher
+- NetLogo 7.0 or higher
 
 ### Install xnLogo
 
@@ -36,465 +39,509 @@ xnlogo --version
 
 Should output: `xnlogo, version 0.1.0`
 
-## Your First Model
+## Quick Start
 
-### Step 1: Create a Python File
+### Step 1: Create a Model
 
-Create `random_walker.py`:
+Create `counter.py`:
 
 ```python
-from xnlogo import agent
+from xnlogo.runtime import Model, reset_ticks, tick
 
-@agent
-class Walker:
-    x: float = 0.0
-    y: float = 0.0
+class CounterModel(Model):
+    """A simple counter that increments each tick."""
+    
+    def __init__(self):
+        super().__init__()
+        self.counter = 0
+        self.max_counter = 10
     
     def setup(self):
-        # Initialize position at origin
-        self.x = 0.0
-        self.y = 0.0
+        """Initialize the model."""
+        reset_ticks()
+        self.counter = 0
     
-    def move(self):
-        # Random walk
-        self.x = self.x + 0.1
-        self.y = self.y - 0.1
+    def go(self):
+        """Run one step."""
+        self.counter += 1
+        if self.counter > self.max_counter:
+            self.counter = 0
+        tick()
 ```
 
-### Step 2: Build the Model
+### Step 2: Compile to NetLogo
 
 ```bash
-xnlogo build random_walker.py
+xnlogo build counter.py
 ```
 
-Creates `random_walker.nlogox` in the current directory.
+This creates `counter.nlogox` in the current directory.
 
 ### Step 3: Open in NetLogo
 
 ```bash
-open random_walker.nlogox
-# Or double-click the file in Finder/Explorer
+open counter.nlogox
+# Or double-click the file
 ```
 
-### Step 4: Run in NetLogo GUI
+### Step 4: Run in NetLogo
 
-1. Click **Setup** button
-2. Click **Go** button
-3. Watch turtles move!
+1. Click the **setup** button
+2. Click the **go** button
+3. Watch the counter increment!
 
-## Agent Basics
+## Model Basics
 
-### Defining Fields
+### Model Structure
 
-Fields become `turtles-own` variables in NetLogo:
+Every xnLogo model is a Python class that inherits from `Model`:
 
 ```python
-@agent
-class Bird:
-    energy: float = 1.0     # Initial energy
-    age: int = 0            # Age in ticks
-    alive: bool = True      # Status flag
+from xnlogo.runtime import Model
+
+class MyModel(Model):
+    def __init__(self):
+        super().__init__()
+        # Initialize model state here
+    
+    def setup(self):
+        # Setup procedure
+        pass
+    
+    def go(self):
+        # Go procedure (runs each tick)
+        pass
 ```
 
-Translates to:
+### Model State
+
+Instance variables in `__init__` become NetLogo global variables:
+
+```python
+def __init__(self):
+    super().__init__()
+    self.population = 100
+    self.infection_rate = 0.05
+    self.total_infected = 0
+```
+
+Translates to NetLogo:
 ```netlogo
-turtles-own [energy age alive]
+globals [population infection_rate total_infected]
 ```
 
-### Field Types
+### Methods as Procedures
 
-Type hints are for documentation (NetLogo is dynamically typed):
-
-| Python Type | NetLogo Use |
-|-------------|-------------|
-| `int` | Numeric values |
-| `float` | Numeric values |
-| `bool` | `true`/`false` |
-| `str` | String literals |
-
-### Methods
-
-Methods become NetLogo procedures:
+Model methods become NetLogo procedures:
 
 ```python
-@agent
-class Counter:
-    count: int = 0
-    
-    def increment(self):
-        self.count = self.count + 1
-    
-    def reset(self):
-        self.count = 0
+def increment_counter(self):
+    self.counter += 1
+
+def reset_counter(self):
+    self.counter = 0
 ```
 
 Generates:
 ```netlogo
-to counter-increment
-  set count (count + 1)
+to increment_counter
+  set counter (counter + 1)
 end
 
-to counter-reset
-  set count 0
+to reset_counter
+  set counter 0
 end
 ```
 
-## Working with Breeds
+## Working with Agents
 
-### Single Breed
+### Creating Breeds
 
-Use the `breed` parameter:
+Use the `breed()` function to define agent types:
 
 ```python
-@agent(breed="fish")
-class Fish:
-    energy: float = 1.0
+from xnlogo.runtime import Model, breed
+
+class EcosystemModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.rabbits = breed("rabbits", "rabbit")
+        self.foxes = breed("foxes", "fox")
 ```
 
-Creates:
+This creates NetLogo breeds:
 ```netlogo
-breed [fish fish]
-fish-own [energy]
+breed [rabbits rabbit]
+breed [foxes fox]
 ```
 
-### Multiple Breeds
+### Creating Agents
 
-Define multiple agent classes:
+Create agents using the breed's `create()` method:
 
 ```python
-@agent(breed="shark")
-class Shark:
-    speed: float = 2.0
+def setup(self):
+    reset_ticks()
+    
+    # Create 50 rabbits
+    for i in range(50):
+        rabbit = self.rabbits.create(1)
+        rabbit.energy = 10
+        rabbit.color = "brown"
+    
+    # Create 10 foxes
+    for i in range(10):
+        fox = self.foxes.create(1)
+        fox.energy = 20
+        fox.color = "red"
+```
 
-@agent(breed="fish")
-class Fish:
-    speed: float = 1.0
+### Agent Properties
+
+Set agent properties using attribute assignment:
+
+```python
+agent = self.rabbits.create(1)
+agent.energy = 10
+agent.color = "brown"
+agent.size = 1.5
+agent.setxy(0, 0)  # Set position
+```
+
+### Iterating Over Agents
+
+Use `all()` to get all agents of a breed:
+
+```python
+def go(self):
+    # Move all rabbits
+    for rabbit in self.rabbits.all():
+        rabbit.forward(1)
+    
+    # Foxes hunt
+    for fox in self.foxes.all():
+        self.hunt(fox)
+    
+    tick()
+```
+
+### Agent Methods
+
+Pass agents to helper methods:
+
+```python
+def hunt(self, fox):
+    """Fox hunts nearby rabbits."""
+    nearby = fox.in_radius(5)  # Get nearby agents
+    if nearby:
+        prey = nearby[0]
+        prey.die()  # Remove from simulation
+        fox.energy += 5
 ```
 
 ## Model Lifecycle
 
-### Setup vs. Go
+### Setup Phase
 
-xnLogo automatically organizes methods:
+The `setup()` method initializes the model:
 
 ```python
-@agent
-class Bird:
-    def setup(self):
-        # Runs once during setup
-        self.x = 0
+def setup(self):
+    reset_ticks()  # Reset tick counter
     
-    def move(self):
-        # Runs every tick during go
-        self.x = self.x + 1
+    # Clear existing agents
+    for agent in self.my_breed.all():
+        agent.die()
     
-    def check_bounds(self):
-        # Also runs every tick
-        pass
+    # Create new agents
+    for i in range(100):
+        agent = self.my_breed.create(1)
+        agent.initialize()
+    
+    # Set initial state
+    self.total_count = 100
 ```
 
-- Methods named `setup` → Called in NetLogo's `setup`
-- All other methods → Called in NetLogo's `go`
+### Go Phase
 
-### Execution Order
+The `go()` method runs each simulation step:
 
-**Setup Phase**:
-1. `clear-all`
-2. Instantiate turtles (configured in NetLogo GUI)
-3. Call all `*-setup` procedures
-4. `reset-ticks`
+```python
+def go(self):
+    # Update agents
+    for agent in self.agents.all():
+        agent.move()
+        agent.interact()
+    
+    # Update globals
+    self.total_count = self.agents.count()
+    
+    # Advance time
+    tick()
+```
 
-**Go Phase** (every tick):
-1. Call all non-setup procedures
-2. `tick`
+### Custom Procedures
 
-## Running Models
+Define helper methods for reusable logic:
 
-### Command-Line Execution
+```python
+def move_agents(self):
+    """Move all agents randomly."""
+    for agent in self.agents.all():
+        angle = random_float(360)
+        agent.set_heading(angle)
+        agent.forward(1)
 
-Run without opening NetLogo GUI:
+def update_statistics(self):
+    """Calculate model statistics."""
+    self.average_energy = sum(a.energy for a in self.agents.all()) / self.agents.count()
+```
+
+## User Interface
+
+### Adding Widgets
+
+Define UI widgets in a `ui()` or `widgets()` method:
+
+```python
+from xnlogo.runtime import View, Button, Monitor, Slider
+
+def ui(self):
+    """Define UI widgets."""
+    # View (world display)
+    self.add_widget(View(
+        x=385, y=10,
+        width=610, height=631,
+        patch_size=13.0
+    ))
+    
+    # Setup button
+    self.add_widget(Button(
+        command="setup",
+        x=15, y=10,
+        width=150, height=60,
+        forever=False
+    ))
+    
+    # Go button
+    self.add_widget(Button(
+        command="go",
+        x=175, y=10,
+        width=150, height=60,
+        forever=True  # Runs repeatedly
+    ))
+    
+    # Monitor
+    self.add_widget(Monitor(
+        expression="count turtles",
+        x=15, y=150,
+        width=150, height=60
+    ))
+    
+    # Slider
+    self.add_widget(Slider(
+        variable="population",
+        min_val=0, max_val=500,
+        default=100,
+        x=15, y=230,
+        width=310, height=40
+    ))
+```
+
+### Widget Types
+
+**View**: Displays the simulation world
+```python
+View(x=385, y=10, width=610, height=631, patch_size=13.0)
+```
+
+**Button**: Executes a command
+```python
+Button(command="setup", x=15, y=10, width=150, height=60, forever=False)
+```
+
+**Monitor**: Displays a value
+```python
+Monitor(expression="count turtles", x=15, y=150, width=150, height=60)
+```
+
+**Slider**: Interactive parameter control
+```python
+Slider(variable="speed", min_val=0, max_val=10, default=5, x=15, y=230, width=310, height=40)
+```
+
+**Switch**: Boolean toggle
+```python
+Switch(variable="debug_mode", default=False, x=15, y=300, width=150, height=40)
+```
+
+### Model Documentation
+
+Add documentation with the `info()` method:
+
+```python
+def info(self):
+    """Return model documentation."""
+    return """
+## WHAT IS IT?
+
+This model simulates...
+
+## HOW IT WORKS
+
+The agents...
+
+## HOW TO USE IT
+
+1. Click SETUP
+2. Click GO
+3. Adjust sliders
+
+## THINGS TO NOTICE
+
+...
+
+## EXTENDING THE MODEL
+
+...
+"""
+```
+
+## Running and Testing
+
+### Compilation
+
+Compile your model to NetLogo:
 
 ```bash
-xnlogo run random_walker.nlogox --ticks 100
+xnlogo build mymodel.py
 ```
 
 Options:
-- `--ticks N`: Run for N ticks
-- `--headless`: Don't show GUI (useful for batch runs)
-- `--seed N`: Set random seed for reproducibility
+```bash
+xnlogo build mymodel.py --output-dir ./output  # Custom output directory
+xnlogo build mymodel.py --format nlogo         # Legacy format
+```
 
-### Interactive Mode
+### Validation
+
+Check for errors without compiling:
 
 ```bash
-xnlogo run random_walker.nlogox
+xnlogo check mymodel.py
 ```
 
-Opens NetLogo GUI where you can:
-- Manually click Setup/Go
-- Adjust speed slider
-- Inspect agent variables
-- Create plots/monitors
+This validates your model structure and reports errors.
 
-### Python Runtime
+### Testing Models
 
-Run directly from Python:
+Test models programmatically:
 
 ```python
-from xnlogo.runtime import Session
-
-# Create session
-session = Session("random_walker.nlogox")
-
-# Setup model
-session.setup()
-
-# Run 100 ticks
-for _ in range(100):
-    session.go()
-
-# Get data
-data = session.get_turtle_data()
-print(data)
-
-# Clean up
-session.close()
-```
-
-## Telemetry and Data Export
-
-### Automatic Telemetry
-
-xnLogo tracks agent states automatically:
-
-```python
-session = Session("my_model.nlogox")
-session.setup()
-
-for tick in range(100):
-    session.go()
-    # Data is collected automatically
-```
-
-### Export to JSON
-
-```bash
-xnlogo export my_model.nlogox --format json --output results.json --ticks 100
-```
-
-**Output** (`results.json`):
-```json
-{
-  "ticks": 100,
-  "agents": [
-    {"tick": 0, "agent_id": 0, "x": 0.0, "y": 0.0},
-    {"tick": 1, "agent_id": 0, "x": 0.1, "y": -0.1},
-    ...
-  ]
-}
-```
-
-### Export to CSV
-
-```bash
-xnlogo export my_model.nlogox --format csv --output results.csv --ticks 100
-```
-
-**Output** (`results.csv`):
-```csv
-tick,agent_id,x,y
-0,0,0.0,0.0
-1,0,0.1,-0.1
-...
-```
-
-### Using Telemetry Data
-
-```python
-from xnlogo.runtime import Session
-import json
-
-session = Session("flocking.nlogox")
-session.setup()
-
-# Run simulation
-for _ in range(100):
-    session.go()
-
-# Export telemetry
-session.export_telemetry("output.json", format="json")
-
-# Load and analyze
-with open("output.json") as f:
-    data = json.load(f)
+if __name__ == "__main__":
+    model = MyModel()
+    model.setup()
     
-# Process data
-print(f"Total ticks: {data['ticks']}")
-print(f"Total agent states: {len(data['agents'])}")
+    # Run 100 steps
+    for i in range(100):
+        model.go()
+    
+    # Check results
+    print(f"Final count: {model.counter}")
+    assert model.counter > 0
 ```
 
 ## Common Patterns
 
-### Random Initialization
+### Random Movement
 
 ```python
-@agent
-class Particle:
-    vx: float = 0.0
-    vy: float = 0.0
-    
-    def setup(self):
-        # Note: random functions not yet supported
-        # Set in NetLogo GUI or use runtime API
-        pass
+from xnlogo.runtime import random_float
+
+def move_randomly(self, agent):
+    angle = random_float(360)
+    agent.set_heading(angle)
+    agent.forward(1)
 ```
 
-**Workaround**: Initialize in NetLogo:
-```netlogo
-to particle-setup
-  set vx random-float 2.0 - 1.0  ; Range: -1.0 to 1.0
-  set vy random-float 2.0 - 1.0
-end
-```
-
-### Boundary Checking
+### Nearby Interactions
 
 ```python
-@agent
-class Wanderer:
-    x: float = 0.0
-    max_x: float = 10.0
-    
-    def move(self):
-        self.x = self.x + 0.5
-    
-    def wrap(self):
-        # TODO: Add if statement support
-        pass
+def interact_with_neighbors(self, agent):
+    nearby = agent.in_radius(3)
+    for neighbor in nearby:
+        if neighbor != agent:
+            # Interact with neighbor
+            pass
 ```
 
-**Current Workaround**: Use NetLogo primitives:
-```netlogo
-to wanderer-wrap
-  if x > max_x [ set x x - max_x ]
-end
-```
-
-### Energy Depletion
+### Energy-Based Behavior
 
 ```python
-@agent
-class Creature:
-    energy: float = 10.0
-    
-    def consume_energy(self):
-        self.energy = self.energy - 0.1
-    
-    def check_alive(self):
-        # TODO: if energy <= 0, set alive to false
-        pass
+def consume_energy(self, agent):
+    agent.energy -= 1
+    if agent.energy <= 0:
+        agent.die()
 ```
 
-### Multiple Behaviors
+### Reproduction
 
 ```python
-@agent
-class Bird:
-    x: float = 0.0
-    
-    def flock(self):
-        # Flocking behavior
-        pass
-    
-    def avoid_predators(self):
-        # Avoidance behavior
-        pass
-    
-    def find_food(self):
-        # Foraging behavior
-        pass
+def reproduce(self, parent):
+    if parent.energy > 50:
+        child = self.agents.create(1)
+        child.energy = 25
+        parent.energy -= 25
+        child.setxy(parent.xcor(), parent.ycor())
 ```
 
-All three methods run every tick in `go`.
+### Counting and Statistics
+
+```python
+def update_stats(self):
+    self.total_agents = self.agents.count()
+    self.average_energy = sum(a.energy for a in self.agents.all()) / max(1, self.total_agents)
+```
 
 ## Troubleshooting
 
-### Import Errors
+### Common Issues
 
-**Problem**: `ModuleNotFoundError: No module named 'xnlogo'`
+**"No module named 'xnlogo'"**
+- Solution: Install xnLogo with `pip install xnlogo`
 
-**Solution**:
-```bash
-pip install --upgrade xnlogo
-# Or if developing:
-pip install -e .
-```
+**"Model class not found"**
+- Ensure your class inherits from `Model`
+- Check that `__init__` calls `super().__init__()`
 
-### Build Warnings
+**"breed() must be called in __init__"**
+- Move all `breed()` calls to the `__init__` method
 
-**Problem**: `Warning: unsupported construct 'if statement'`
+**Compilation errors**
+- Run `xnlogo check yourmodel.py` for detailed diagnostics
+- Check for unsupported Python features (try/except, lambda, async/await)
 
-**Explanation**: xnLogo doesn't yet translate all Python constructs.
+### Unsupported Features
 
-**Solution**: 
-1. Check [translation-rules.md](translation-rules.md) for supported features
-2. Use NetLogo code directly for unsupported constructs
-3. Wait for future releases (or contribute!)
+xnLogo doesn't support all Python features:
+- Exception handling (`try`/`except`)
+- Lambda functions
+- Async/await
+- Generators (`yield`)
+- Context managers (`with`)
+- Dynamic imports
 
-### NetLogo Not Found
+Use simple Python: classes, methods, loops, conditionals, and basic expressions.
 
-**Problem**: `xnlogo run` fails with Java errors
+### Getting Help
 
-**Solution**:
-```bash
-# Check Java installation
-java -version  # Should be 17+
-
-# Install Java if needed (macOS)
-brew install openjdk@17
-
-# Set JAVA_HOME
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-```
-
-### Generated Code Issues
-
-**Problem**: NetLogo code doesn't work as expected
-
-**Solution**:
-1. Run `xnlogo check my_model.py` to validate
-2. Open `.nlogox` in text editor and inspect `<code>` section
-3. Compare with [translation-rules.md](translation-rules.md)
-4. File an issue on GitHub with:
-   - Your Python code
-   - Expected NetLogo output
-   - Actual generated code
-
-### Telemetry Data Missing
-
-**Problem**: `export_telemetry()` produces empty data
-
-**Solution**:
-- Ensure you called `session.setup()` before `session.go()`
-- Check that model has agents (turtles created)
-- Verify you're running `go()` at least once
-
-### Type Errors
-
-**Problem**: Python type checker complains about agent fields
-
-**Explanation**: Type hints are for documentation only.
-
-**Solution**: xnLogo doesn't enforce types - ignore type checker warnings or use `# type: ignore`.
+- Check examples in `examples/` directory
+- Review documentation at docs/
+- File issues on GitHub
 
 ## Next Steps
 
-- **Examples**: See [examples/](../examples/) for complete models
-- **Translation Reference**: [translation-rules.md](translation-rules.md)
-- **Architecture**: [architecture.md](architecture.md)
-- **API Docs**: [api-reference.md](api-reference.md) _(coming soon)_
-
-## Getting Help
-
-- **Issues**: [GitHub Issues](https://github.com/yourorg/xnlogo/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourorg/xnlogo/discussions)
-- **Email**: support@xnlogo.dev _(if available)_
+- Read [Architecture](architecture.md) to understand how xnLogo works
+- See [Translation Rules](translation-rules.md) for Python→NetLogo conversion details
+- Explore the `examples/` directory for complete models
+- Try the [Technical Overview](technical-overview.md) for advanced topics

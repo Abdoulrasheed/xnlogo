@@ -1,29 +1,51 @@
 """Test model with multiple breeds."""
 
-from xnlogo import agent
+from xnlogo.runtime import Model, breed, reset_ticks, tick
 
 
-@agent(breed="sheep")
-class Sheep:
-    energy: float = 5.0
-    wool: float = 0.0
+class EcosystemModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.sheep = breed("sheep", "sheep")
+        self.wolves = breed("wolves", "wolf")
 
-    def graze(self):
-        self.energy = self.energy + 0.5
+    def setup(self):
+        reset_ticks()
+        # Create some sheep
+        for i in range(10):
+            s = self.sheep.create(1)
+            s.energy = 5.0
+            s.wool = 0.0
+        
+        # Create some wolves
+        for i in range(3):
+            w = self.wolves.create(1)
+            w.energy = 10.0
+            w.hunger = 0.0
 
-    def grow_wool(self):
-        if self.energy > 2:
-            self.wool = self.wool + 0.1
+    def go(self):
+        # Sheep behavior
+        for s in self.sheep.all():
+            self.graze(s)
+            self.grow_wool(s)
+        
+        # Wolf behavior
+        for w in self.wolves.all():
+            self.hunt(w)
+            self.check_hunger(w)
+        
+        tick()
 
+    def graze(self, sheep):
+        sheep.energy = sheep.energy + 0.5
 
-@agent(breed="wolf")
-class Wolf:
-    energy: float = 10.0
-    hunger: float = 0.0
+    def grow_wool(self, sheep):
+        if sheep.energy > 2:
+            sheep.wool = sheep.wool + 0.1
 
-    def hunt(self):
-        self.hunger = self.hunger + 0.2
+    def hunt(self, wolf):
+        wolf.hunger = wolf.hunger + 0.2
 
-    def check_hunger(self):
-        if self.hunger > 5:
-            self.energy = self.energy - 1
+    def check_hunger(self, wolf):
+        if wolf.hunger > 5:
+            wolf.energy = wolf.energy - 1

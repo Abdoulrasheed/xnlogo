@@ -1,17 +1,25 @@
 """Sample model for testing."""
 
-
-def agent(*args, **kwargs):  # pragma: no cover - decorator stub for parsing only
-    def wrapper(cls):
-        return cls
-
-    return wrapper
+from xnlogo.runtime import Model, breed, reset_ticks, tick
 
 
-@agent
-class Rabbit:
-    energy: int = 10
+class RabbitModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.rabbits = breed("rabbits", "rabbit")
 
-    def move(self):
-        self.energy -= 1
-        self.position += 1
+    def setup(self):
+        reset_ticks()
+        for i in range(10):
+            rabbit = self.rabbits.create(1)
+            rabbit.energy = 10
+            rabbit.position = 0
+
+    def go(self):
+        for rabbit in self.rabbits.all():
+            self.move(rabbit)
+        tick()
+
+    def move(self, rabbit):
+        rabbit.energy -= 1
+        rabbit.position += 1

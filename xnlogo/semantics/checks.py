@@ -57,6 +57,10 @@ def _check_unsupported_constructs(
         if not isinstance(statement, RawStatement):
             continue
 
+        # Skip validation for statements that are already in NetLogo syntax
+        if getattr(statement, "is_netlogo", False):
+            continue
+
         try:
             tree = ast.parse(statement.source)
         except SyntaxError as e:

@@ -43,10 +43,10 @@ Tests that ensure:
 3. XML is normalized before comparison to ignore formatting differences
 
 **Current golden tests**:
-- `simple_agent.nlogox` - Basic agent with state
-- `agent_with_conditionals.nlogox` - If/else statements
-- `multi_breed.nlogox` - Multiple agent breeds
-- `complex_agent.nlogox` - Advanced features (power, abs, nested conditions)
+- `simple_agent.nlogox` - Basic model with state variables
+- `agent_with_conditionals.nlogox` - If/else conditional statements
+- `multi_breed.nlogox` - Multiple breed definitions
+- `complex_agent.nlogox` - Advanced features (operators, built-ins, nested conditions)
 
 ### 4. NetLogo Validity Tests
 
@@ -55,11 +55,11 @@ Tests that ensure:
 **Purpose**: Validate that generated NetLogo code is syntactically valid
 
 **Validation checks**:
-- **Balanced brackets `[ ]`
-- **Balanced parentheses `( )`
-- **No Python syntax leaks (`self.`, `def`, `class`, `import`)
-- **No Python operators (`==`, `**`)
-- **All golden reference files are valid
+- Balanced brackets `[ ]`
+- Balanced parentheses `( )`
+- No Python syntax leaks (`self.`, `def`, `class`, `import`)
+- No Python-only operators (e.g., `==` should become `=`)
+- All golden reference files are valid NetLogo code
 
 **Tests**:
 - Individual validity tests for each test model
@@ -80,7 +80,7 @@ Tests that ensure:
 
 ### Files Committed to Git:
 
-****Source files** (`tests/data/*.py`) - Test inputs
+**Source files** (`tests/data/*.py`) - Test inputs
 ```
 tests/data/simple_agent.py
 tests/data/agent_with_conditionals.py
@@ -92,7 +92,7 @@ tests/data/invalid_behavior_syntax.py
 tests/data/valid_behavior_syntax.py
 ```
 
-****Golden reference files** (`tests/data/golden/*.nlogox`) - Expected outputs
+**Golden reference files** (`tests/data/golden/*.nlogox`) - Expected outputs
 ```
 tests/data/golden/simple_agent.nlogox
 tests/data/golden/agent_with_conditionals.nlogox
@@ -100,13 +100,13 @@ tests/data/golden/multi_breed.nlogox
 tests/data/golden/complex_agent.nlogox
 ```
 
-****Test code** (`tests/test_*.py`) - Test implementations
+**Test code** (`tests/test_*.py`) - Test implementations
 
-****Examples** (`examples/*.py`, `examples/*.nlogox`) - Documentation/demos
+**Examples** (`examples/*.py`, `examples/*.nlogox`) - Documentation/demos
 
 ### Files Ignored (in .gitignore):
 
-****Generated artifacts** (`tests/data/*.nlogox`) - Can be regenerated
+**Generated artifacts** (`tests/data/*.nlogox`) - Can be regenerated
 ```gitignore
 # Generated test artifacts (but keep golden reference files)
 tests/data/*.nlogox

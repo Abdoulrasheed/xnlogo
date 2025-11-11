@@ -23,8 +23,9 @@ class IRStatement:
 class RawStatement(IRStatement):
     """Represents a raw source snippet carried through to code generation."""
 
-    __slots__ = ("source",)
+    __slots__ = ("source", "is_netlogo")
 
-    def __init__(self, source: str) -> None:
+    def __init__(self, source: str, is_netlogo: bool = False) -> None:
         IRStatement.__init__(self, StatementKind.RAW)
         self.source = source
+        self.is_netlogo = is_netlogo  # True if already converted to NetLogo syntax

@@ -1,13 +1,25 @@
-"""Test agent with conditional logic."""
+"""Test model with conditional logic."""
 
-from xnlogo import agent
+from xnlogo.runtime import Model, reset_ticks, tick
 
 
-@agent
-class SmartAgent:
-    energy: float = 10.0
-    x: float = 0.0
-    max_energy: float = 20.0
+class SmartAgentModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.energy = 10.0
+        self.x = 0.0
+        self.max_energy = 20.0
+
+    def setup(self):
+        reset_ticks()
+        self.energy = 10.0
+        self.x = 0.0
+
+    def go(self):
+        self.consume_energy()
+        self.check_alive()
+        self.bound_energy()
+        tick()
 
     def consume_energy(self):
         self.energy = self.energy - 0.1

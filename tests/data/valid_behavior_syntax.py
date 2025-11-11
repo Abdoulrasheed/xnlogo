@@ -1,17 +1,26 @@
 """Test statements that might be valid in context but invalid when parsed alone."""
 
-from xnlogo import agent
+from xnlogo.runtime import Model, breed, reset_ticks, tick
 
 
-@agent(breed="walker", state=["position"])
-class Walker:
-    """Agent for testing statement validation."""
+class WalkerModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.walkers = breed("walkers", "walker")
 
     def setup(self):
         """Initialize walker."""
-        self.position = 0
+        reset_ticks()
+        for i in range(5):
+            walker = self.walkers.create(1)
+            walker.position = 0
 
-    def move(self):
+    def go(self):
+        for walker in self.walkers.all():
+            self.move(walker)
+        tick()
+
+    def move(self, walker):
         """Move forward."""
         # This is a complete valid statement
-        self.position += 1
+        walker.position += 1

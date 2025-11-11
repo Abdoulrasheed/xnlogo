@@ -1,337 +1,245 @@
 # Architecture
 
-This document explains how xnLogo works internally - the compilation pipeline, runtime integration, and key design decisions.
+This document explains the internal design of xnLogo: the compilation pipeline, intermediate representation, and code generation strategy.
 
-## High-Level Overview
+## Overview
 
-```
-┌─────────────────────┐
-│  Python Source Code │
-│  (@agent classes)   │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│   AST Parser        │
-│  - Parse decorators │
-│  - Extract classes  │
-│  - Extract methods  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Semantic Checks    │
-│  - Validate types   │
-│  - Check constructs │
-│  - Emit diagnostics │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Intermediate Rep   │
-│  (AgentSpec, IR)    │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  Python→NetLogo     │
-│  Translator         │
-│  - AST walking      │
-│  - Statement conv.  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  NetLogo Generator  │
-│  - Structure gen    │
-│  - Template render  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  .nlogox Output     │
-│  (XML + NetLogo)    │
-└─────────────────────┘
-```
+xnLogo is a Python-to-NetLogo transpiler that converts Python agent-based models into native NetLogo code. The system consists of three major subsystems:
 
-## Pipeline Stages
+1. **Parser**: Converts Python source into an intermediate representation
+2. **Code Generator**: Transforms IR into NetLogo code
+3. **Runtime**: Executes models via NetLogo's headless API (optional)
 
-### 1. AST Parsing (`xnlogo/parser/ast_parser.py`)
+## Compilation Pipeline
 
-**Purpose**: Convert Python source files into an Intermediate Representation (IR)
+The transpilation process follows a multi-stage pipeline:
 
-**Key Classes**:
-- `Parser` - Main entry point for parsing
-- `_ModuleAnalyzer` - AST visitor that extracts agent definitions
+### Stage 1: Python Parsing
 
-**Process**:
-1. Read Python source files
-2. Parse using Python's `ast` module
-3. Visit `ClassDef` nodes decorated with `@agent`
-4. Extract state fields (class variables with type hints)
-5. Extract behaviors (methods → `AgentBehavior`)
-6. **Normalize indentation** - Extract raw statement source and dedent
-7. Build `AgentSpec` objects
+The parser (`xnlogo/parser/ast_parser.py`) analyzes Python source files using Python's built-in `ast` module. It identifies Model subclasses and extracts their structure.
 
-**Key Innovation**: Indentation normalization handles compound statements (try/except, if/for) that have inconsistent indentation in the raw AST source.
+**Key Operations:**
+- Locate classes that inherit from `Model`
+- Extract instance variables (model state) from `__init__`
+- Identify methods and categorize them by purpose (setup, go, custom procedures)
+- Extract breed definitions via `breed()` calls
+- Capture UI widgets from `ui()` or `widgets()` methods
+- Extract documentation from `info()` methods
 
+**Example Input:**
 ```python
-def _statements_from_function(self, func: ast.FunctionDef) -> Iterator[IRStatement]:
-    for stmt in func.body:
-        source = ast.get_source_segment(self._info.source, stmt)
-        # Normalize indentation by finding min indent of continuation lines
-        lines = source.split('\n')
-        # ... dedent logic ...
-        yield RawStatement(source=normalized)
-```
-
-### 2. Semantic Validation (`xnlogo/semantics/checks.py`)
-
-**Purpose**: Catch errors and unsupported constructs before code generation
-
-**Validation Passes**:
-
-**Structural Checks** (`run_structural_checks`):
-- Ensure at least one agent is defined
-- Check for duplicate behavior names
-- Validate decorator usage
-
-**Behavioral Checks** (`run_behavioral_checks`):
-- Detect unsupported Python constructs:
-  - `async`/`await`
-  - `lambda` functions
-  - `try`/`except` blocks
-  - Complex comprehensions
-  - `yield`/generators
-  - `with` statements
-  - `import` statements
-  - Nested classes
-
-**Implementation**:
-```python
-def _check_unsupported_constructs(agent, behavior, diagnostics):
-    for statement in behavior.statements:
-        tree = ast.parse(statement.source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Try):
-                unsupported_nodes.add("try/except")
-            # ... more checks ...
-```
-
-### 3. Intermediate Representation (`xnlogo/ir/`)
-
-**Purpose**: Backend-agnostic representation of the agent-based model
-
-**Key Data Classes**:
-
-```python
-@dataclass
-class StateField:
-    name: str
-    type_hint: str | None
-    default: str | None
-
-@dataclass
-class AgentBehavior:
-    name: str
-    statements: list[IRStatement]
-    schedule_phase: SchedulePhase = SchedulePhase.TICK
-
-@dataclass
-class AgentSpec:
-    identifier: str
-    breed: str | None = None
-    state_fields: list[StateField] = field(default_factory=list)
-    behaviors: list[AgentBehavior] = field(default_factory=list)
-
-@dataclass
-class ModelSpec:
-    agents: list[AgentSpec] = field(default_factory=list)
-    globals: list[GlobalVar] = field(default_factory=list)
-    patches: PatchSpec = field(default_factory=PatchSpec)
-    reporters: list[Reporter] = field(default_factory=list)
-    random_seed_strategy: SeedConfig = field(default_factory=SeedConfig)
-```
-
-**Design Principles**:
-- Typed with dataclasses for mypy validation
-- Serializable for debugging/testing
-- Backend-agnostic (could target Mesa, Repast, etc.)
-
-### 4. Python→NetLogo Translation (`xnlogo/codegen/netlogo_translator.py`)
-
-**Purpose**: Convert individual Python statements to NetLogo syntax
-
-**Key Class**: `NetLogoTranslator(ast.NodeVisitor)`
-
-**Translation Rules**:
-
-| Python | NetLogo |
-|--------|---------|
-| `self.count = 0` | `set count 0` |
-| `self.x = self.x + 1` | `set x (x + 1)` |
-| `self.x += 1` | `set x x + 1` |
-| `True` / `False` | `true` / `false` |
-| `self.field` | `field` |
-
-**AST Visitor Pattern**:
-```python
-def visit_Assign(self, node: ast.Assign) -> str:
-    if isinstance(target, ast.Attribute):
-        if target.value.id == "self":
-            field_name = target.attr
-            value_expr = self.visit(node.value)
-            return f"set {field_name} {value_expr}"
-```
-
-**Fallback**: If a construct can't be translated, returns Python source with `; UNPARSED:` comment
-
-### 5. NetLogo Code Generation (`xnlogo/codegen/netlogo_generator.py`)
-
-**Purpose**: Orchestrate complete NetLogo file generation
-
-**Responsibilities**:
-1. Generate declarations (`turtles-own`, `globals`, `breeds`, `patches-own`)
-2. Create `setup` and `go` procedures
-3. Render agent behaviors as NetLogo procedures
-4. **Call translator** for statement-level conversion
-5. Emit XML structure for `.nlogox` format
-
-**Key Methods**:
-
-```python
-class NetLogoGenerator:
-    def render(self) -> str:
-        # Generates complete NetLogo code body
+class CounterModel(Model):
+    def __init__(self):
+        super().__init__()
+        self.counter = 0
         
-    def _render_declarations(self) -> list[str]:
-        # Creates variable declarations
+    def setup(self):
+        reset_ticks()
+        self.counter = 0
         
-    def _render_setup(self) -> list[str]:
-        # Generates setup procedure
-        
-    def _render_go(self) -> list[str]:
-        # Generates go procedure
-        
-    def _render_behavior(self, agent, behavior) -> list[str]:
-        # Uses translator for each statement
-        agent_fields = {field.name for field in agent.state_fields}
-        for statement in behavior.statements:
-            translated = translate_statement(statement.source, agent_fields)
-            lines.append(f"  {translated}")
+    def go(self):
+        self.counter += 1
+        tick()
 ```
 
-**Template Engine**: Uses Jinja2 for XML structure (`base.nlogox.xml.j2`)
+The parser builds an internal model representation capturing the structure, state, and behavior.
 
-### 6. Runtime Integration (`xnlogo/runtime/`)
+### Stage 2: Semantic Validation
 
-**Purpose**: Execute compiled models in NetLogo and collect telemetry
+The validator (`xnlogo/semantics/checks.py`) examines the IR for errors and unsupported constructs before code generation.
 
-**Key Components**:
+**Validation Rules:**
+- Check for required methods (at minimum, a setup or go method)
+- Detect unsupported Python features (async/await, try/except, lambda, yield, with statements)
+- Validate state field types
+- Ensure breed definitions are well-formed
 
-**SessionManager** (`session.py`):
-- JVM lifecycle management via JPype
-- NetLogo 7 headless API bridge
-- Deterministic seed handling
+**Error Reporting:**
+All validation errors are collected into a diagnostic bag with file locations, making it easy to identify and fix issues.
 
-**TelemetryBuffer** (`telemetry.py`):
-- Streams tick-by-tick data
-- Exports to pandas/CSV/JSON
-- Custom reporter collection
+### Stage 3: Intermediate Representation
 
-## Design Decisions
+The IR (`xnlogo/ir/model.py`) provides a backend-agnostic representation of the model. This decouples parsing from code generation, enabling multiple output formats.
 
-### Why Two Separate Modules (Generator vs Translator)?
+**Core IR Types:**
+- `ModelSpec`: Complete model structure with agents, globals, patches
+- `AgentSpec`: Agent breed with state fields and behaviors
+- `AgentBehavior`: A procedure with its statements and scheduling phase
+- `StateField`: Variable declaration with name, type, and default value
+- `GlobalVar`: Model-level variable
+- `PatchSpec`: Patch properties
 
-**Separation of Concerns**:
-- **Generator**: High-level structure (file layout, declarations, procedures)
-- **Translator**: Low-level syntax (statement conversion)
+**Design Benefits:**
+- Type-safe representation (validated with dataclasses)
+- Serializable for testing and debugging
+- Backend-independent (could target other ABM frameworks)
+- Clear separation of concerns
 
-**Analogy**: Like a book publisher where:
-- Generator = Layout designer (chapters, TOC, page numbers)
-- Translator = Language translator (sentence-by-sentence conversion)
+### Stage 4: Statement Translation
 
-### Why Normalize Indentation in Parser?
+The translator (`xnlogo/codegen/netlogo_translator.py`) converts individual Python statements to NetLogo syntax using AST traversal.
 
-Python's `ast.get_source_segment()` preserves original indentation, which can be inconsistent for compound statements:
+**Translation Strategy:**
+The translator walks Python's abstract syntax tree and generates equivalent NetLogo code based on node types. It understands NetLogo's syntax requirements, such as prefix notation for operators and the distinction between commands and reporters.
 
-```python
-try:                      # 0 spaces
-    self.value = 1 / 0   # 12 spaces
-except:                   # 8 spaces
-    pass                  # 12 spaces
-```
+**Key Translations:**
+- Attribute assignment: `self.x = 5` → `set x 5`
+- Augmented assignment: `self.x += 1` → `set x (x + 1)`
+- Boolean literals: `True`/`False` → `true`/`false`
+- Self references: Strip `self.` prefix when accessing state
+- Method calls: Convert to NetLogo procedure calls
 
-When extracted, this can't be parsed standalone. Solution: find minimum indent of continuation lines and dedent uniformly.
+**Local Variables:**
+The translator tracks variable declarations to correctly use `let` for new local variables versus `set` for existing variables. This prevents polluting the global namespace.
 
-### Why AST-Based Translation?
+### Stage 5: NetLogo Code Generation
 
-**Alternatives Considered**:
-1. String manipulation (regex) - Too fragile
-2. Full parser generator (Lark) - Overkill for Python→NetLogo
+The generator (`xnlogo/codegen/netlogo_generator.py`) orchestrates the creation of complete NetLogo files.
 
-**Why AST**:
-- Python's `ast` module is stable and well-maintained
-- Handles all Python syntax automatically
-- Provides structured tree for transformation
-- Type-safe traversal with visitor pattern
+**Responsibilities:**
+- Generate variable declarations (globals, breeds, turtles-own, patches-own)
+- Create setup and go procedures
+- Render custom procedures from model methods
+- Generate reporter procedures
+- Emit XML structure for .nlogox format
+- Include UI widgets and documentation
 
-### Why Intermediate Representation?
+**Code Structure:**
+NetLogo code is organized into sections:
+1. Declarations (globals, breeds, own variables)
+2. Setup procedure
+3. Go procedure (default or user-defined)
+4. Custom procedures
+5. Reporter procedures
 
-**Benefits**:
-- Decouple parsing from code generation
-- Enable multiple backends (Mesa, JSON, etc.)
-- Type-safe transformations
-- Serializable for testing (golden files)
-- Easier to reason about transformations
+**Template Engine:**
+The generator uses Jinja2 templates to render the final XML structure, combining the generated NetLogo code with widget definitions and model info.
+
+### Stage 6: Output Formats
+
+xnLogo supports two output formats:
+
+**nlogox (Preferred):**
+XML-based format introduced in NetLogo 7. Contains NetLogo code, UI widgets, model info, and metadata in structured XML.
+
+**nlogo (Legacy):**
+Plain text format from earlier NetLogo versions. Supported for compatibility with older tools.
+
+## Key Design Decisions
+
+### Model Subclass Pattern
+
+xnLogo uses Python class inheritance rather than decorators. Models extend the `Model` base class, making the API feel natural to Python developers and enabling IDE support, type checking, and documentation.
+
+### Intermediate Representation
+
+The IR layer decouples parsing from code generation. This design:
+- Makes the codebase more maintainable
+- Enables testing of each stage independently
+- Allows future support for multiple backends (Mesa, Repast, etc.)
+- Provides clear contracts between components
+
+### AST-Based Translation
+
+Using Python's `ast` module for translation provides:
+- Robust parsing of all Python syntax
+- Type-safe tree traversal
+- No regex fragility
+- Automatic handling of operator precedence
+
+Alternative approaches (string manipulation, custom parsers) would be more error-prone and harder to maintain.
+
+### Statement-Level Granularity
+
+The translator works at the statement level rather than expression level. Each Python statement becomes one or more NetLogo statements. This granularity provides better error messages and easier debugging.
+
+### Indentation Normalization
+
+Python's `ast.get_source_segment()` preserves original indentation, which can be inconsistent for compound statements. The parser normalizes indentation by detecting the minimum indent level and adjusting all lines accordingly. This ensures extracted code can be parsed standalone.
+
+## Runtime Integration
+
+The runtime subsystem (`xnlogo/runtime/`) provides optional integration with NetLogo's headless API for executing models directly from Python.
+
+**Components:**
+- Session management: JVM lifecycle and workspace creation
+- Command execution: Issue NetLogo commands programmatically
+- Reporter evaluation: Query model state
+- Telemetry collection: Stream tick-by-tick data for analysis
+
+**Use Cases:**
+- Parameter sweeps and sensitivity analysis
+- Automated testing of models
+- Integration with Python analysis pipelines
+- Batch execution for research
 
 ## Testing Strategy
 
 ### Unit Tests
-- `test_parser.py` - AST parsing logic
-- `test_translator.py` - Python→NetLogo statement conversion
-- `test_semantics.py` - Validation passes
-- `test_compiler.py` - Integration tests
+Each subsystem has focused unit tests:
+- Parser tests verify IR construction from Python code
+- Translator tests validate statement-level conversion
+- Semantic tests check validation logic
+- Compiler tests ensure end-to-end compilation
 
 ### Golden Tests
-- `test_golden.py` - Compare generated `.nlogox` against reference files
-- Catches regressions in output format
-- Documents expected behavior
+Golden tests compare generated NetLogo output against reference files. These catch regressions in code generation and document expected behavior.
 
-### Test Coverage
-- 24 tests covering all major components
-- Parser, translator, semantics, compiler, runtime
-- Edge cases for indentation, operators, constructs
+### Integration Tests
+End-to-end tests verify the complete pipeline from Python source to runnable NetLogo models.
 
-## Performance Considerations
+## Performance Characteristics
 
-**Compilation Speed**:
-- Single-pass AST parsing
-- No expensive transformations
-- Jinja2 template caching
+**Compilation Speed:**
+- Single-pass parsing minimizes overhead
+- AST traversal is efficient (O(n) in code size)
+- Template rendering is fast with Jinja2 caching
 
-**Runtime**:
-- JPype bridge adds minimal overhead
-- NetLogo's JVM handles simulation
-- Telemetry streaming (not batch collection)
+**Output Size:**
+Generated NetLogo code is comparable to hand-written code. No significant bloat from transpilation.
 
-## Future Enhancements
+**Runtime:**
+When using the runtime integration, the JPype bridge adds minimal overhead. NetLogo's JVM handles the actual simulation with native performance.
 
-1. **Multi-Backend Support** - Target Mesa, Repast from same IR
-2. **Incremental Compilation** - Only recompile changed agents
-3. **Link Support** - Translate network/graph constructs
-4. **Extension Hooks** - Allow custom NetLogo primitives
-5. **Debug Info** - Map NetLogo line numbers back to Python source
+## Module Structure
 
-## Key Files
+```
+xnlogo/
+├── parser/          # Python → IR conversion
+│   ├── ast_parser.py       # Main parser
+│   └── py_to_netlogo.py    # Statement translator helper
+├── semantics/       # Validation
+│   ├── checks.py           # Validation rules
+│   └── diagnostics.py      # Error collection
+├── ir/              # Intermediate representation
+│   ├── model.py            # Core IR types
+│   └── statements.py       # Statement types
+├── codegen/         # IR → NetLogo
+│   ├── netlogo_generator.py   # Main generator
+│   ├── netlogo_translator.py  # Statement translation
+│   └── templates/              # Jinja2 templates
+├── runtime/         # Execution (optional)
+│   ├── api.py              # Python API
+│   ├── session.py          # NetLogo integration
+│   ├── telemetry.py        # Data collection
+│   └── ui.py               # Widget definitions
+├── cli/             # Command-line interface
+│   └── commands.py         # CLI commands
+└── compiler.py      # Main entry point
+```
 
-| File | Purpose |
-|------|---------|
-| `parser/ast_parser.py` | Python AST → IR conversion |
-| `semantics/checks.py` | Validation passes |
-| `ir/model.py` | IR data structures |
-| `ir/statements.py` | Statement types |
-| `codegen/netlogo_translator.py` | Python→NetLogo syntax |
-| `codegen/netlogo_generator.py` | File structure generation |
-| `runtime/session.py` | NetLogo JVM bridge |
-| `cli/commands.py` | CLI entry points |
+## Extension Points
+
+The architecture supports several extension mechanisms:
+
+**Custom Backends:**
+Implement a new code generator to target different ABM frameworks (Mesa, Repast, etc.) using the same IR.
+
+**Additional Validations:**
+Add semantic checks by extending the validation pass.
+
+**Custom Primitives:**
+Future support for NetLogo extensions could map Python functions to extension primitives.
+
+**Analysis Tools:**
+The IR can be analyzed for metrics like complexity, agent coupling, or behavior patterns.

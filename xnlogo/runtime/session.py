@@ -89,7 +89,7 @@ def _ensure_headless_workspace(config: SessionConfig) -> Any:
 
     _ensure_jvm_started(jpype, config)
 
-    from org.nlogo.headless import HeadlessWorkspace  # type: ignore[attr-defined]
+    from org.nlogo.headless import HeadlessWorkspace
 
     _HEADLESS_CLASS = HeadlessWorkspace
     return HeadlessWorkspace
@@ -97,8 +97,8 @@ def _ensure_headless_workspace(config: SessionConfig) -> Any:
 
 def _import_jpype():
     try:
-        import jpype  # type: ignore[import-not-found]
-        import jpype.imports  # type: ignore[import-not-found]  # noqa: F401
+        import jpype
+        import jpype.imports
     except ImportError as exc:
         raise RuntimeError(
             "JPype is not installed. Install xnlogo[runtime] or add jpype1 to your environment."

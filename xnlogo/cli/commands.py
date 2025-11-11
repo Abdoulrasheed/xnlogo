@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
-import typer  # type: ignore[import-not-found]
+import typer
 
 from xnlogo.compiler import build_artifact, parse_sources
 from xnlogo.runtime.session import NetLogoSession, SessionConfig
@@ -181,9 +181,7 @@ def run(
         if seed is not None:
             try:
                 session.command(f"random-seed {seed}")
-            except (
-                Exception
-            ) as exc:  # pragma: no cover - depends on runtime availability
+            except Exception as exc:
                 typer.secho(f"Unable to apply seed: {exc}", fg=typer.colors.RED)
                 raise typer.Exit(code=1)
         session.command("setup")
@@ -193,7 +191,7 @@ def run(
             session.command("go")
             try:
                 current_tick = int(session.report("ticks"))
-            except Exception as exc:  # pragma: no cover - runtime guard
+            except Exception as exc:
                 typer.secho(
                     f"Failed to read ticks reporter: {exc}", fg=typer.colors.RED
                 )
@@ -203,7 +201,7 @@ def run(
             for label, reporter in metric_specs:
                 try:
                     metrics_payload[label] = session.report(reporter)
-                except Exception as exc:  # pragma: no cover - runtime guard
+                except Exception as exc:
                     typer.secho(
                         f"Failed to evaluate reporter '{reporter}' ({label}): {exc}",
                         fg=typer.colors.RED,
@@ -246,7 +244,7 @@ def export(
 
     try:
         buffer = TelemetryBuffer.from_json_file(source)
-    except Exception as exc:  # pragma: no cover - defensive I/O guard
+    except Exception as exc:
         typer.secho(f"Failed to load telemetry: {exc}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 

@@ -12,6 +12,13 @@ class NetLogoTranslator(ast.NodeVisitor):
     def __init__(self, breed_prefix: str | None = None) -> None:
         self.agent_fields: set[str] = set()
         self.breed_prefix = breed_prefix
+        self.local_vars: set[str] = set()  # Track local variables (use 'let')
+        self.declared_vars: set[str] = (
+            set()
+        )  # Track which vars have been declared in current scope
+        self._analyzed: bool = (
+            False  # Flag to track if local vars have been pre-analyzed
+        )
 
     def translate(self, source: str, agent_fields: set[str] | None = None) -> str:
         """Translate Python source to NetLogo code."""
@@ -20,6 +27,11 @@ class NetLogoTranslator(ast.NodeVisitor):
 
         try:
             tree = ast.parse(source)
+
+            # Pre-analyze to find local variables (only if not already analyzed)
+            if not self._analyzed:
+                self._analyze_local_variables(tree)
+
             # Handle single statement
             if len(tree.body) == 1:
                 return self.visit(tree.body[0])
@@ -28,6 +40,31 @@ class NetLogoTranslator(ast.NodeVisitor):
         except SyntaxError:
             # If we can't parse it, return as-is with a comment
             return f"; UNPARSED: {source}"
+
+    def _analyze_local_variables(self, tree: ast.Module) -> None:
+        """Identify local variables (non-self assignments) in the code."""
+        # Don't clear if already analyzed - we want to keep the state
+        if self._analyzed:
+            return
+
+        self.local_vars.clear()
+        self.declared_vars.clear()
+        self._analyzed = True
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    # Simple variable: x = value (not self.x)
+                    if isinstance(target, ast.Name):
+                        self.local_vars.add(target.id)
+                    # self.field is NOT a local variable
+                    elif isinstance(target, ast.Attribute):
+                        if (
+                            isinstance(target.value, ast.Name)
+                            and target.value.id == "self"
+                        ):
+                            # This is a field assignment, not local
+                            pass
 
     def visit_Assign(self, node: ast.Assign) -> str:
         """Translate assignment: self.field = expr -> set field expr"""
@@ -57,11 +94,17 @@ class NetLogoTranslator(ast.NodeVisitor):
                 key = self.visit(target.slice)
                 return f"; TODO: set {obj}[{key}] to {value_expr}"
 
-            # Simple variable assignment: var = value -> set var value
+            # Simple variable assignment: var = value
             if isinstance(target, ast.Name):
                 var_name = target.id
                 value_expr = self.visit(node.value)
-                return f"set {var_name} {value_expr}"
+
+                # Use 'let' for first assignment of local variables, 'set' for subsequent
+                if var_name in self.local_vars and var_name not in self.declared_vars:
+                    self.declared_vars.add(var_name)
+                    return f"let {var_name} {value_expr}"
+                else:
+                    return f"set {var_name} {value_expr}"
 
         # Fallback: use ast.unparse
         return ast.unparse(node)
@@ -348,7 +391,7 @@ class NetLogoTranslator(ast.NodeVisitor):
                 # Add breed prefix if available
                 if self.breed_prefix:
                     method_name = f"{self.breed_prefix}-{method_name}"
-                
+
                 args = [self._visit_arg(arg) for arg in node.args]
 
                 if not args:
@@ -457,9 +500,7 @@ class NetLogoTranslator(ast.NodeVisitor):
 
 
 def translate_statement(
-    source: str, 
-    agent_fields: set[str] | None = None,
-    breed_prefix: str | None = None
+    source: str, agent_fields: set[str] | None = None, breed_prefix: str | None = None
 ) -> str:
     """Translate a Python statement to NetLogo code."""
     translator = NetLogoTranslator(breed_prefix)
