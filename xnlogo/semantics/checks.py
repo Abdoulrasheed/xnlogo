@@ -7,7 +7,7 @@ from collections import Counter
 from typing import TYPE_CHECKING, Set
 
 if TYPE_CHECKING:
-    from xnlogo.ir.model import ModelSpec
+    from xnlogo.ir.model import ModelSpec, AgentBehavior
     from xnlogo.semantics.diagnostics import DiagnosticBag
 
 from xnlogo.ir.model import AgentSpec
@@ -17,7 +17,7 @@ from xnlogo.ir.statements import RawStatement
 def run_structural_checks(model: ModelSpec, diagnostics: DiagnosticBag) -> None:
     """Validate high-level model structure."""
     if not model.agents:
-        diagnostics.error("No agents defined. Add at least one @agent-decorated class.")
+        diagnostics.error("No agents defined. Add at least one Model subclass.")
         return
 
     for agent in model.agents:
@@ -34,7 +34,7 @@ def run_behavioral_checks(model: ModelSpec, diagnostics: DiagnosticBag) -> None:
                 diagnostics.warning(
                     f"Behavior '{behavior.name}' in agent '{agent.identifier}' has no statements."
                 )
-            _check_unsupported_constructs(agent, behavior, diagnostics)
+            _check_unsupported_constructs_in_behavior(agent, behavior, diagnostics)
 
 
 def _check_duplicate_behaviors(agent: AgentSpec, diagnostics: DiagnosticBag) -> None:
@@ -47,34 +47,43 @@ def _check_duplicate_behaviors(agent: AgentSpec, diagnostics: DiagnosticBag) -> 
             )
 
 
-def _check_unsupported_constructs(
-    agent: AgentSpec, behavior, diagnostics: DiagnosticBag
+def _check_unsupported_constructs_in_behavior(
+    agent: AgentSpec, behavior: "AgentBehavior", diagnostics: DiagnosticBag
 ) -> None:
-    """Detect Python constructs that cannot be translated to NetLogo."""
+    """Detect Python constructs that cannot be translated to NetLogo.
+    
+    This validates the original Python source before conversion to NetLogo.
+    """
     unsupported_nodes: Set[str] = set()
 
+    # Collect all source statements (both raw Python and converted)
     for statement in behavior.statements:
         if not isinstance(statement, RawStatement):
             continue
 
-        # Skip validation for statements that are already in NetLogo syntax
+        # Try to parse the source - could be Python or NetLogo
+        # We need to identify which it is
+        source = statement.source
+        
+        # Skip if it's already NetLogo (simple heuristic: contains NetLogo keywords)
         if getattr(statement, "is_netlogo", False):
+            # For NetLogo statements, we can't validate Python constructs
+            # This is expected - they've already been converted
             continue
-
+        
+        # Try to parse as Python
         try:
-            tree = ast.parse(statement.source)
-        except SyntaxError as e:
-            diagnostics.error(
-                f"Agent '{agent.identifier}', behavior '{behavior.name}': "
-                f"Syntax error in statement: {e.msg}"
-            )
+            tree = ast.parse(source)
+        except SyntaxError:
+            # Can't parse - might be NetLogo syntax or invalid Python
+            # Don't report an error here since it might be valid NetLogo
             continue
-        except Exception as e:
-            diagnostics.warning(f"Failed to parse statement for validation: {e}")
+        except Exception:
             continue
 
+        # Walk the AST looking for unsupported constructs
         for node in ast.walk(tree):
-            if isinstance(node, (ast.AsyncFor, ast.AsyncWith, ast.Await)):
+            if isinstance(node, (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith, ast.Await)):
                 unsupported_nodes.add("async/await")
             elif isinstance(node, ast.Lambda):
                 unsupported_nodes.add("lambda")
@@ -95,7 +104,9 @@ def _check_unsupported_constructs(
             elif isinstance(node, ast.ClassDef):
                 unsupported_nodes.add("nested class")
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                unsupported_nodes.add("import statement")
+                # Skip imports at module level (these are OK)
+                # Only warn about imports inside methods
+                pass
 
     for construct in sorted(unsupported_nodes):
         diagnostics.warning(

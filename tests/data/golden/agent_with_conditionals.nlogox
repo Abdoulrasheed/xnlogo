@@ -1,35 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <model version="NetLogo 7.0.0" snapToGrid="true">
-  <code><![CDATA[turtles-own [energy x max_energy]
+  <code><![CDATA[globals [energy x max_energy]
 
 to setup
   clear-all
-  ; TODO: instantiate SmartAgent
   reset-ticks
 end
 
 to go
-  ask turtles [ smartagent-consume_energy ]
-  ask turtles [ smartagent-check_alive ]
-  ask turtles [ smartagent-bound_energy ]
+  consume_energy
+  check_alive
+  bound_energy
   tick
 end
 
-to smartagent-consume_energy
+to consume_energy
   set energy (energy - 0.1)
 end
 
-to smartagent-check_alive
-  if (energy <= 0) [
-  set x -1
-]
-[
+to check_alive
+  ifelse energy <= 0 [
+  set x (- 1)
+] [
   set x 1
 ]
 end
 
-to smartagent-bound_energy
-  if (energy > max_energy) [
+to bound_energy
+  if energy > max_energy [
   set energy max_energy
 ]
 end

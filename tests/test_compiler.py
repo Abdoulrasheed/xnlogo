@@ -40,4 +40,4 @@ def test_build_artifact_writes_nlogox(tmp_path: Path) -> None:
     contents = artifact_path.read_text(encoding="utf-8")
 
     assert "<model" in contents
-    assert "Rabbit" in contents
+    assert "rabbit" in contents  # breed singular form (lowercase)

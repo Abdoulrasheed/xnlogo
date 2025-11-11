@@ -310,6 +310,9 @@ class _ModuleAnalyzer(ast.NodeVisitor):
         if not self._model:
             return
 
+        # Validate the function for unsupported constructs BEFORE conversion
+        self._validate_function_ast(func)
+
         # Find the breed this belongs to (if any)
         # For now, we'll create a pseudo-agent for observer procedures
         observer_agent = self._get_or_create_observer_agent()
@@ -328,6 +331,9 @@ class _ModuleAnalyzer(ast.NodeVisitor):
         if not self._model or not self._model.agents:
             return
 
+        # Validate the function for unsupported constructs BEFORE conversion
+        self._validate_function_ast(func)
+
         # Find the first non-Observer agent (i.e., the actual turtle breed)
         target_agent = None
         for agent in self._model.agents:
@@ -345,6 +351,38 @@ class _ModuleAnalyzer(ast.NodeVisitor):
         behavior.schedule_phase = SchedulePhase.TICK
         behavior.context = ExecutionContext.TURTLE
         target_agent.behaviors.append(behavior)
+
+    def _validate_function_ast(self, func) -> None:
+        """Validate a function's AST for unsupported constructs before conversion.
+        
+        Args:
+            func: ast.FunctionDef or ast.AsyncFunctionDef node
+        """
+        unsupported_constructs = set()
+        
+        # Check if the function itself is async
+        if isinstance(func, ast.AsyncFunctionDef):
+            unsupported_constructs.add("async/await")
+        
+        # Walk the function body for other unsupported constructs
+        for node in ast.walk(func):
+            if isinstance(node, (ast.AsyncFor, ast.AsyncWith, ast.Await)):
+                unsupported_constructs.add("async/await")
+            elif isinstance(node, ast.Lambda):
+                unsupported_constructs.add("lambda")
+            elif isinstance(node, ast.Try):
+                unsupported_constructs.add("try/except")
+            elif isinstance(node, ast.With):
+                unsupported_constructs.add("with statement")
+            elif isinstance(node, ast.ClassDef):
+                unsupported_constructs.add("nested class")
+            elif isinstance(node, (ast.Yield, ast.YieldFrom)):
+                unsupported_constructs.add("generator (yield)")
+        
+        for construct in sorted(unsupported_constructs):
+            self._diagnostics.warning(
+                f"Method '{func.name}': {construct} may not translate to NetLogo"
+            )
 
     def _get_or_create_observer_agent(self) -> AgentSpec:
         """Get or create a pseudo-agent for observer procedures."""

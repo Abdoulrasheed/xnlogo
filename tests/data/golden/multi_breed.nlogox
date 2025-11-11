@@ -1,41 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <model version="NetLogo 7.0.0" snapToGrid="true">
-  <code><![CDATA[breed [sheep sheep]
-sheep-own [energy wool]
-breed [wolf wolf]
-wolf-own [energy hunger]
+  <code><![CDATA[breed [sheep sheep-one]
+breed [wolves wolf]
 
 to setup
   clear-all
-  ; TODO: instantiate Sheep
-  ; TODO: instantiate Wolf
   reset-ticks
 end
 
 to go
-  ask sheep [ sheep-graze ]
-  ask sheep [ sheep-grow_wool ]
-  ask wolf [ wolf-hunt ]
-  ask wolf [ wolf-check_hunger ]
+  ask sheep [
+  graze
+  grow_wool
+]
+  ask wolves [
+  hunt
+  check_hunger
+]
   tick
 end
 
-to sheep-graze
+to graze
   set energy (energy + 0.5)
 end
 
-to sheep-grow_wool
-  if (energy > 2) [
+to grow_wool
+  if energy > 2 [
   set wool (wool + 0.1)
 ]
 end
 
-to wolf-hunt
+to hunt
   set hunger (hunger + 0.2)
 end
 
-to wolf-check_hunger
-  if (hunger > 5) [
+to check_hunger
+  if hunger > 5 [
   set energy (energy - 1)
 ]
 end

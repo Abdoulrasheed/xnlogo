@@ -1,25 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <model version="NetLogo 7.0.0" snapToGrid="true">
-  <code><![CDATA[turtles-own [count]
+  <code><![CDATA[globals [count]
 
 to setup
   clear-all
-  ; TODO: instantiate Counter
   reset-ticks
 end
 
 to go
-  ask turtles [ counter-increment ]
-  ask turtles [ counter-reset ]
+  increment
   tick
 end
 
-to counter-increment
+to increment
   set count (count + 1)
-end
-
-to counter-reset
-  set count 0
 end
 ]]></code>
   <widgets>

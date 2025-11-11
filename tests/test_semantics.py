@@ -10,12 +10,12 @@ def test_detects_async_await(tmp_path: Path) -> None:
     source = tmp_path / "model.py"
     source.write_text(
         """
-def agent(cls):
-    return cls
+from xnlogo.runtime import Model
 
-@agent
-class Bot:
-    speed: int = 1
+class Bot(Model):
+    def __init__(self):
+        super().__init__()
+        self.speed = 1
     
     async def move(self):
         await self.step()
@@ -36,12 +36,12 @@ def test_detects_lambda(tmp_path: Path) -> None:
     source = tmp_path / "model.py"
     source.write_text(
         """
-def agent(cls):
-    return cls
+from xnlogo.runtime import Model
 
-@agent
-class Agent:
-    x: int = 0
+class Agent(Model):
+    def __init__(self):
+        super().__init__()
+        self.x = 0
     
     def compute(self):
         f = lambda n: n * 2
@@ -62,12 +62,12 @@ def test_detects_try_except(tmp_path: Path) -> None:
     source = tmp_path / "model.py"
     source.write_text(
         """
-def agent(cls):
-    return cls
+from xnlogo.runtime import Model
 
-@agent
-class Agent:
-    value: int = 0
+class Agent(Model):
+    def __init__(self):
+        super().__init__()
+        self.value = 0
     
     def safe_compute(self):
         try:
@@ -90,12 +90,12 @@ def test_allows_simple_comprehensions(tmp_path: Path) -> None:
     source = tmp_path / "model.py"
     source.write_text(
         """
-def agent(cls):
-    return cls
+from xnlogo.runtime import Model
 
-@agent
-class Agent:
-    neighbors: list = []
+class Agent(Model):
+    def __init__(self):
+        super().__init__()
+        self.neighbors = []
     
     def find(self):
         close = [n for n in self.neighbors if n.distance < 5]

@@ -282,15 +282,15 @@ def test_translate_return_expression():
 
 # Variable assignments
 def test_translate_local_variable():
-    """Test local variable assignment."""
+    """Test local variable assignment (first use should be 'let')."""
     result = translate_statement("neighbors = 5", set())
-    assert result == "set neighbors 5"
+    assert result == "let neighbors 5"
 
 
 def test_translate_local_var_expression():
-    """Test local variable with expression."""
+    """Test local variable with expression (first use should be 'let')."""
     result = translate_statement("total = self.x + self.y", {"x", "y"})
-    assert result == "set total (x + y)"
+    assert result == "let total (x + y)"
 
 
 # Method calls on variables
