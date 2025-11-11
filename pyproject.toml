@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xnlogo"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python-to-NetLogo transpiler and integration toolkit"
 authors = [{ name = "Abdulrasheed Ibrahim" }]
 readme = "README.md"
